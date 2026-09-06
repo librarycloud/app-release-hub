@@ -1,0 +1,28 @@
+name: Notify App Release Hub on New Release
+
+# Paste this file into your APP's GitHub repository (not the hub repository)
+# at: .github/workflows/notify-release-hub.yml
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  notify-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger App Release Hub sync
+        run: |
+          curl -X POST "${{ secrets.RELEASE_HUB_URL }}/admin/apps/${{ secrets.RELEASE_HUB_APP_ID }}/sync" \
+            -H "X-API-Key: ${{ secrets.RELEASE_HUB_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            --fail \
+            --silent \
+            --show-error
+
+# ─── How to set up ──────────────────────────────────────────────────────────
+# In your APP repository → Settings → Secrets and variables → Actions, add:
+#
+#   RELEASE_HUB_URL      = https://your-hub-server.com
+#   RELEASE_HUB_APP_ID   = android-main          (the appId you registered)
+#   RELEASE_HUB_API_KEY  = your-admin-api-key

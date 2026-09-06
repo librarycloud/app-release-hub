@@ -1,0 +1,54 @@
+import { db } from "./index.js";
+
+export function initSchema() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS apps (
+      app_id       TEXT PRIMARY KEY,
+      name         TEXT NOT NULL,
+      platform     TEXT NOT NULL DEFAULT 'android',
+      github_repo  TEXT NOT NULL DEFAULT '',
+      github_api_url TEXT NOT NULL DEFAULT 'https://api.github.com',
+      auto_sync    INTEGER NOT NULL DEFAULT 0,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS versions (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      app_id           TEXT NOT NULL,
+      version_code     INTEGER NOT NULL,
+      version_name     TEXT NOT NULL,
+      min_version_code INTEGER NOT NULL DEFAULT 1,
+      force_update     INTEGER NOT NULL DEFAULT 0,
+      release_notes    TEXT NOT NULL DEFAULT '[]',
+      changelog_url    TEXT NOT NULL DEFAULT '',
+      published_at     TEXT NOT NULL DEFAULT '',
+      file_url         TEXT NOT NULL DEFAULT '',
+      sha256           TEXT NOT NULL DEFAULT '',
+      size             INTEGER NOT NULL DEFAULT 0,
+      is_latest        INTEGER NOT NULL DEFAULT 0,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(app_id, version_code),
+      FOREIGN KEY(app_id) REFERENCES apps(app_id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS patches (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      app_id              TEXT NOT NULL,
+      from_version_code   INTEGER NOT NULL,
+      target_version_code INTEGER NOT NULL,
+      patch_file          TEXT NOT NULL,
+      patch_url           TEXT NOT NULL,
+      patch_sha256        TEXT NOT NULL DEFAULT '',
+      patch_size          INTEGER NOT NULL DEFAULT 0,
+      created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(app_id, from_version_code, target_version_code),
+      FOREIGN KEY(app_id) REFERENCES apps(app_id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_versions_app_id ON versions(app_id);
+    CREATE INDEX IF NOT EXISTS idx_versions_latest ON versions(app_id, is_latest);
+    CREATE INDEX IF NOT EXISTS idx_patches_app_target ON patches(app_id, target_version_code);
+    CREATE INDEX IF NOT EXISTS idx_patches_lookup ON patches(app_id, from_version_code, target_version_code);
+  `);
+}

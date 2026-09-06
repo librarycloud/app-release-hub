@@ -4,14 +4,12 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { config } from "../config.js";
 import {
-  getVersion,
+  getApp,
   getVersionHistory,
   getLatestVersion,
   upsertVersion,
-  getPatch,
   getPatchesForTarget,
   upsertPatch,
-  getAllPatches,
 } from "./storageAdapter.js";
 import { checkBsdiffAvailable, computeFileSha256, generatePatch } from "./patchService.js";
 
@@ -32,6 +30,13 @@ function getReleaseDir(appId) {
 function getPatchDir(appId) {
   return path.join(getAppFilesDir(appId), "patches");
 }
+
+/** Map platform to the canonical file extension used for release binaries */
+function getFileExt(platform) {
+  const map = { android: "apk", windows: "exe", macos: "dmg", ios: "ipa" };
+  return map[String(platform || "").toLowerCase()] || "bin";
+}
+
 
 async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
@@ -103,11 +108,13 @@ export async function generatePatchBetweenVersions(appId, fromVersionCode, targe
   if (inFlightPatches.has(taskKey)) return await inFlightPatches.get(taskKey);
 
   const taskPromise = (async () => {
+    const appRow = getApp(appId);
+    const ext = getFileExt(appRow?.platform);
     const releaseDir = getReleaseDir(appId);
     const patchDir = getPatchDir(appId);
 
-    const oldFile = path.join(releaseDir, `release-v${fromCode}.bin`);
-    const newFile = path.join(releaseDir, `release-v${targetCode}.bin`);
+    const oldFile = path.join(releaseDir, `release-v${fromCode}.${ext}`);
+    const newFile = path.join(releaseDir, `release-v${targetCode}.${ext}`);
 
     for (const [label, fp] of [["旧版本", oldFile], ["新版本", newFile]]) {
       try { await stat(fp); } catch {
@@ -146,14 +153,16 @@ export async function generatePatchBetweenVersions(appId, fromVersionCode, targe
  */
 export async function generateAllMissingPatchesForVersion(appId, targetVersionCode, githubContext) {
   const targetCode = Number(targetVersionCode);
+  const appRow = getApp(appId);
+  const ext = getFileExt(appRow?.platform);
   const history = getVersionHistory(appId);
   const targetEntry = history.find((h) => Number(h.version_code) === targetCode);
   if (!targetEntry) throw new Error(`目标版本 ${targetCode} 不存在`);
 
   const releaseDir = getReleaseDir(appId);
-  const newFile = path.join(releaseDir, `release-v${targetCode}.bin`);
+  const newFile = path.join(releaseDir, `release-v${targetCode}.${ext}`);
   try { await stat(newFile); } catch {
-    throw new Error(`目标版本文件在服务器不存在: release-v${targetCode}.bin`);
+    throw new Error(`目标版本文件在服务器不存在: release-v${targetCode}.${ext}`);
   }
 
   const eligibleOlder = history.filter((h) => Number(h.version_code) < targetCode);
@@ -170,7 +179,7 @@ export async function generateAllMissingPatchesForVersion(appId, targetVersionCo
 
   for (const prev of missing) {
     const oldCode = Number(prev.version_code);
-    const oldFile = path.join(releaseDir, `release-v${oldCode}.bin`);
+    const oldFile = path.join(releaseDir, `release-v${oldCode}.${ext}`);
     let hasFile = false;
 
     try { await stat(oldFile); hasFile = true; } catch {
@@ -201,8 +210,9 @@ export async function generateAllMissingPatchesForVersion(appId, targetVersionCo
 /**
  * Sync latest release from a GitHub repository for a given app.
  */
-export async function syncLatestRelease(appId, { githubRepo, githubApiUrl = "https://api.github.com", token = "" }) {
+export async function syncLatestRelease(appId, { githubRepo, githubApiUrl = "https://api.github.com", token = "", platform = "android" }) {
   if (!githubRepo) throw new Error("githubRepo 未配置");
+  const ext = getFileExt(platform);
   const base = String(githubApiUrl).replace(/\/$/, "");
   const headers = buildHeaders(token);
   const githubContext = { base, repo: githubRepo, headers };
@@ -235,16 +245,16 @@ export async function syncLatestRelease(appId, { githubRepo, githubApiUrl = "htt
   const existingLatest = getLatestVersion(appId);
   if (existingLatest && Number(existingLatest.version_code) < versionCode) {
     const prevCode = Number(existingLatest.version_code);
-    const versionedOld = path.join(releaseDir, `release-v${prevCode}.bin`);
-    const legacyPath = path.join(releaseDir, "latest.bin");
+    const versionedOld = path.join(releaseDir, `release-v${prevCode}.${ext}`);
+    const legacyPath = path.join(releaseDir, `latest.${ext}`);
     try { await stat(versionedOld); } catch {
       try { await stat(legacyPath); await copyFile(legacyPath, versionedOld); } catch {}
     }
   }
 
   const tempFile = path.join(releaseDir, `.release-${versionCode}.tmp`);
-  const versionedFile = path.join(releaseDir, `release-v${versionCode}.bin`);
-  const legacyFile = path.join(releaseDir, "latest.bin");
+  const versionedFile = path.join(releaseDir, `release-v${versionCode}.${ext}`);
+  const legacyFile = path.join(releaseDir, `latest.${ext}`);
 
   try {
     await downloadWithTimeout(fileAsset.browser_download_url, { headers }, tempFile, fileTimeoutMs);
@@ -281,7 +291,7 @@ export async function syncLatestRelease(appId, { githubRepo, githubApiUrl = "htt
       releaseNotes,
       changelogUrl,
       publishedAt: String(metadata.publishedAt || release.published_at || "").slice(0, 10),
-      fileUrl: `/api/apps/${appId}/releases/release-v${versionCode}.bin`,
+      fileUrl: `/api/apps/${appId}/releases/release-v${versionCode}.${ext}`,
       sha256,
       size: fileStat.size,
       isLatest: true,
@@ -294,7 +304,7 @@ export async function syncLatestRelease(appId, { githubRepo, githubApiUrl = "htt
       const history = getVersionHistory(appId).filter((h) => Number(h.version_code) < versionCode).slice(0, 3);
       for (const prev of history) {
         const oldCode = Number(prev.version_code);
-        const oldFile = path.join(releaseDir, `release-v${oldCode}.bin`);
+        const oldFile = path.join(releaseDir, `release-v${oldCode}.${ext}`);
         let hasFile = false;
         try { await stat(oldFile); hasFile = true; } catch {
           try { hasFile = await tryFetchHistoricalFile(appId, oldCode, oldFile, githubContext); } catch {}

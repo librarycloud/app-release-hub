@@ -113,6 +113,7 @@ export async function syncReleaseController(request, reply) {
     githubRepo: app.githubRepo,
     githubApiUrl: app.githubApiUrl,
     token,
+    platform: app.platform,
   });
   return ok(reply, result, "Release 已同步");
 }

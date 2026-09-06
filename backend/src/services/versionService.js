@@ -2,6 +2,7 @@ import path from "node:path";
 import { stat } from "node:fs/promises";
 import { config } from "../config.js";
 import {
+  getApp,
   getLatestVersion,
   getVersionHistory,
   getPatch,
@@ -65,9 +66,11 @@ export async function getVersionForClient(appId, { currentVersionCode } = {}) {
     // On-demand dynamic generation if no cached patch exists
     if (!patchRow) {
       try {
+        const appRow = getApp(appId);
+        const ext = { android: "apk", windows: "exe", macos: "dmg", ios: "ipa" }[String(appRow?.platform || "").toLowerCase()] || "bin";
         const releaseDir = path.resolve(config.filesDir, appId, "releases");
-        const oldFile = path.join(releaseDir, `release-v${clientCode}.bin`);
-        const newFile = path.join(releaseDir, `release-v${latest.versionCode}.bin`);
+        const oldFile = path.join(releaseDir, `release-v${clientCode}.${ext}`);
+        const newFile = path.join(releaseDir, `release-v${latest.versionCode}.${ext}`);
         const [oldSt, newSt, bsdiffOk] = await Promise.all([
           stat(oldFile).catch(() => null),
           stat(newFile).catch(() => null),

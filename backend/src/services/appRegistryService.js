@@ -47,6 +47,8 @@ function formatApp(row) {
     githubRepo: row.github_repo,
     githubApiUrl: row.github_api_url,
     autoSync: row.auto_sync === 1,
+    lastSyncedAt: row.last_synced_at || null,
+    lastSyncError: row.last_sync_error || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

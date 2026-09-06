@@ -29,6 +29,7 @@ export const deleteApp = (appId) => http.delete(`/admin/apps/${appId}`);
 
 // ─── Release ─────────────────────────────────────────────────────────────────
 export const syncRelease = (appId) => http.post(`/admin/apps/${appId}/sync`);
+export const syncAllApps = () => http.post("/admin/sync-all");
 
 // ─── Patches ─────────────────────────────────────────────────────────────────
 export const getPatchMatrix = (appId) => http.get(`/admin/apps/${appId}/patches`);

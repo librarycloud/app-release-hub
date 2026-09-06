@@ -6,6 +6,7 @@
         <span class="sub">已注册 App</span>
       </div>
       <div style="display:flex;gap:8px">
+        <el-button :loading="syncingAll" @click="doSyncAll">🔄 检查全部更新</el-button>
         <el-button type="primary" @click="showCreate = true">+ 注册新 App</el-button>
         <el-button @click="logout">退出</el-button>
       </div>
@@ -19,10 +20,21 @@
         <el-card class="app-card" shadow="hover" @click="$router.push(`/apps/${app.appId}`)">
           <div class="app-icon">{{ platformIcon(app.platform) }}</div>
           <div class="app-name">{{ app.name }}</div>
-          <div class="app-id"><el-tag size="small" type="info">{{ app.appId }}</el-tag></div>
+          <div class="app-id">
+            <el-tag size="small" type="info">{{ app.appId }}</el-tag>
+            <el-tag :type="app.autoSync ? 'success' : 'info'" size="small" style="margin-left:4px">
+              {{ app.autoSync ? '定时同步' : '手动' }}
+            </el-tag>
+          </div>
           <div class="app-meta">
             <span>{{ app.platform }}</span>
             <span v-if="app.githubRepo" class="repo">{{ app.githubRepo }}</span>
+            <div v-if="app.lastSyncedAt" class="sync-time">
+              最近检查: {{ formatTime(app.lastSyncedAt) }}
+            </div>
+            <div v-if="app.lastSyncError" class="sync-err" :title="app.lastSyncError">
+              ⚠️ {{ app.lastSyncError }}
+            </div>
           </div>
           <div class="app-footer">
             <el-button size="small" type="danger" plain @click.stop="confirmDelete(app)">删除</el-button>
@@ -68,21 +80,44 @@
   </div>
 </template>
 
-<script setup>
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { listApps, createApp, deleteApp, clearApiKey } from "../api/appHub.js";
+import { listApps, createApp, deleteApp, syncAllApps, clearApiKey } from "../api/appHub.js";
 
 const router = useRouter();
 const apps = ref([]);
 const loading = ref(false);
+const syncingAll = ref(false);
 const showCreate = ref(false);
 const creating = ref(false);
 const form = ref({ appId: "", name: "", platform: "android", githubRepo: "", githubApiUrl: "https://api.github.com", autoSync: false });
 
 function platformIcon(p) {
   return { android: "🤖", windows: "🪟", macos: "🍎", ios: "📱" }[p] || "📦";
+}
+
+function formatTime(iso) {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  } catch {
+    return iso;
+  }
+}
+
+async function doSyncAll() {
+  syncingAll.value = true;
+  try {
+    const res = await syncAllApps();
+    ElMessage.success(res.message || "已触发全部自动同步任务");
+    await load();
+  } catch (e) {
+    ElMessage.error(e?.message || "批量同步失败");
+  } finally {
+    syncingAll.value = false;
+  }
 }
 
 async function load() {
@@ -138,4 +173,6 @@ onMounted(load);
 .repo { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-footer { display: flex; justify-content: space-between; margin-top: 12px; }
 .hint { font-size: 12px; color: #999; margin-left: 8px; }
+.sync-time { font-size: 11px; color: #888; margin-top: 4px; }
+.sync-err { font-size: 11px; color: #f56c6c; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

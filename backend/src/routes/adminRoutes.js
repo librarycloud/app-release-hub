@@ -8,6 +8,7 @@ import {
   patchMatrixController,
   generatePatchController,
   generateAllPatchesController,
+  syncAllAppsController,
 } from "../controllers/appController.js";
 
 const auth = { preHandler: [apiKeyAuth] };
@@ -20,6 +21,7 @@ export default async function adminRoutes(fastify) {
   fastify.delete("/admin/apps/:appId", auth, deleteAppController);
 
   // Release management
+  fastify.post("/admin/sync-all", auth, syncAllAppsController);
   fastify.post("/admin/apps/:appId/sync", auth, syncReleaseController);
 
   // Patch matrix and generation

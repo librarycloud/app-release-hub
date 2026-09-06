@@ -21,5 +21,7 @@ export const config = {
   filesDir: process.env.FILES_DIR || "data/files",
   // Optional CDN/download base URL override for served files
   downloadBaseUrl: (process.env.DOWNLOAD_BASE_URL || "").trim().replace(/\/+$/, ""),
+  // Periodic background check interval in minutes (default 60 min, 0 to disable)
+  autoSyncIntervalMinutes: Number(process.env.AUTO_SYNC_INTERVAL_MINUTES || 60),
   resolveGithubToken,
 };

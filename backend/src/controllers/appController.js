@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { config } from "../config.js";
-import { getApp } from "../services/storageAdapter.js";
+import { getApp, recordSyncResult } from "../services/storageAdapter.js";
 import {
   getAllApps,
   getAppById,
@@ -109,13 +109,19 @@ export async function syncReleaseController(request, reply) {
   const app = await requireApp(appId, reply);
   if (!app) return;
   const token = config.resolveGithubToken(appId);
-  const result = await syncLatestRelease(appId, {
-    githubRepo: app.githubRepo,
-    githubApiUrl: app.githubApiUrl,
-    token,
-    platform: app.platform,
-  });
-  return ok(reply, result, "Release 已同步");
+  try {
+    const result = await syncLatestRelease(appId, {
+      githubRepo: app.githubRepo,
+      githubApiUrl: app.githubApiUrl,
+      token,
+      platform: app.platform,
+    });
+    recordSyncResult(appId);
+    return ok(reply, result, "Release 已同步");
+  } catch (err) {
+    recordSyncResult(appId, { error: err.message });
+    throw err;
+  }
 }
 
 export async function patchMatrixController(request, reply) {
@@ -151,4 +157,10 @@ export async function generateAllPatchesController(request, reply) {
     : null;
   const result = await generateAllMissingPatchesForVersion(appId, targetVersionCode, githubContext);
   return ok(reply, result, `已生成 ${result.generatedCount} 个差分补丁`);
+}
+
+export async function syncAllAppsController(_request, reply) {
+  const { runAutoSyncCycle } = await import("../services/autoSyncService.js");
+  const result = await runAutoSyncCycle();
+  return ok(reply, result, "全部自动同步任务已触发");
 }

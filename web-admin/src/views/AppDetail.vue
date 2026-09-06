@@ -9,13 +9,34 @@
     <!-- Toolbar -->
     <div class="toolbar">
       <div>
-        <h2 style="margin:0">{{ appId }}</h2>
-        <span class="sub" v-if="bsdiffAvailable">✅ bsdiff 可用</span>
-        <span class="sub warn" v-else>⚠️ bsdiff 未安装，无法生成差分包</span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <h2 style="margin:0">{{ appInfo?.name || appId }}</h2>
+          <el-tag size="small" type="info">{{ appId }}</el-tag>
+          <el-tag size="small">{{ appInfo?.platform || 'android' }}</el-tag>
+        </div>
+        <div class="sub-row">
+          <span v-if="appInfo?.githubRepo" class="repo-link">
+            📦 {{ appInfo.githubRepo }}
+          </span>
+          <span class="sub" v-if="bsdiffAvailable">✅ bsdiff 可用</span>
+          <span class="sub warn" v-else>⚠️ bsdiff 未安装，无法生成差分包</span>
+          <span v-if="appInfo?.lastSyncedAt" class="sub">
+            最近检查: {{ formatTime(appInfo.lastSyncedAt) }}
+          </span>
+          <span v-if="appInfo?.lastSyncError" class="sub warn">
+            ⚠️ {{ appInfo.lastSyncError }}
+          </span>
+        </div>
       </div>
-      <el-button type="primary" :loading="syncing" @click="doSync">
-        🔄 同步 GitHub 最新 Release
-      </el-button>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="display:flex;align-items:center;gap:6px" v-if="appInfo">
+          <span style="font-size:13px;color:#666">定时同步:</span>
+          <el-switch v-model="appInfo.autoSync" @change="toggleAutoSync" />
+        </div>
+        <el-button type="primary" :loading="syncing" @click="doSync">
+          🔄 同步 GitHub 最新 Release
+        </el-button>
+      </div>
     </div>
 
     <div v-loading="loading">
@@ -132,11 +153,12 @@
 import { ref, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage, ElNotification } from "element-plus";
-import { syncRelease, getPatchMatrix, generateAllPatches, generatePatch } from "../api/appHub.js";
+import { listApps, updateApp, syncRelease, getPatchMatrix, generateAllPatches, generatePatch } from "../api/appHub.js";
 
 const route = useRoute();
 const appId = route.params.appId;
 
+const appInfo = ref(null);
 const loading = ref(false);
 const syncing = ref(false);
 const versionGroups = ref([]);
@@ -151,18 +173,43 @@ function formatSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
+function formatTime(iso) {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  } catch {
+    return iso;
+  }
+}
+
 async function load() {
   loading.value = true;
   try {
-    const res = await getPatchMatrix(appId);
-    versionGroups.value = res.data?.versionGroups || [];
-    bsdiffAvailable.value = res.data?.bsdiffAvailable ?? true;
+    const [matrixRes, appsRes] = await Promise.all([
+      getPatchMatrix(appId),
+      listApps(),
+    ]);
+    versionGroups.value = matrixRes.data?.versionGroups || [];
+    bsdiffAvailable.value = matrixRes.data?.bsdiffAvailable ?? true;
+    appInfo.value = (appsRes.data || []).find((a) => a.appId === appId) || null;
+
     // Auto-open the latest version group
     if (versionGroups.value.length > 0) {
       openGroups.value = [String(versionGroups.value[0].versionCode)];
     }
   } catch (e) { ElMessage.error(e?.message || "加载失败"); }
   finally { loading.value = false; }
+}
+
+async function toggleAutoSync(val) {
+  try {
+    await updateApp(appId, { autoSync: val });
+    ElMessage.success(val ? "已开启定时自动检测" : "已关闭定时自动检测");
+  } catch (e) {
+    ElMessage.error(e?.message || "更新设置失败");
+    if (appInfo.value) appInfo.value.autoSync = !val;
+  }
 }
 
 async function doSync() {
@@ -205,6 +252,8 @@ onMounted(load);
 <style scoped>
 .page { padding: 24px; max-width: 1100px; margin: 0 auto; }
 .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.sub-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
+.repo-link { font-size: 13px; color: #409eff; }
 .sub { font-size: 13px; color: #67c23a; }
 .sub.warn { color: #e6a23c; }
 .group-title { display: flex; align-items: center; justify-content: space-between; width: 100%; padding-right: 12px; }

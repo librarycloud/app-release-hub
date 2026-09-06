@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import { config } from "./config.js";
 import { initSchema } from "./db/schema.js";
+import { startAutoSyncScheduler } from "./services/autoSyncService.js";
 import publicRoutes from "./routes/publicRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 
@@ -41,6 +42,7 @@ fastify.setErrorHandler((err, _request, reply) => {
 try {
   await fastify.listen({ port: config.port, host: config.host });
   console.log(`App Release Hub running on http://${config.host}:${config.port}`);
+  startAutoSyncScheduler();
 } catch (err) {
   fastify.log.error(err);
   process.exit(1);

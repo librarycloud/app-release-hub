@@ -3,14 +3,16 @@ import { db } from "./index.js";
 export function initSchema() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS apps (
-      app_id       TEXT PRIMARY KEY,
-      name         TEXT NOT NULL,
-      platform     TEXT NOT NULL DEFAULT 'android',
-      github_repo  TEXT NOT NULL DEFAULT '',
+      app_id         TEXT PRIMARY KEY,
+      name           TEXT NOT NULL,
+      platform       TEXT NOT NULL DEFAULT 'android',
+      github_repo    TEXT NOT NULL DEFAULT '',
       github_api_url TEXT NOT NULL DEFAULT 'https://api.github.com',
-      auto_sync    INTEGER NOT NULL DEFAULT 0,
-      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+      auto_sync      INTEGER NOT NULL DEFAULT 0,
+      last_synced_at TEXT,
+      last_sync_error TEXT,
+      created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS versions (
@@ -51,4 +53,13 @@ export function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_patches_app_target ON patches(app_id, target_version_code);
     CREATE INDEX IF NOT EXISTS idx_patches_lookup ON patches(app_id, from_version_code, target_version_code);
   `);
+
+  // Migrate existing tables if missing new columns
+  const columns = db.prepare("PRAGMA table_info(apps)").all().map((c) => c.name);
+  if (!columns.includes("last_synced_at")) {
+    db.exec("ALTER TABLE apps ADD COLUMN last_synced_at TEXT");
+  }
+  if (!columns.includes("last_sync_error")) {
+    db.exec("ALTER TABLE apps ADD COLUMN last_sync_error TEXT");
+  }
 }

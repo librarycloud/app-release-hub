@@ -17,8 +17,12 @@ export function insertApp({ appId, name, platform = "android", githubRepo = "", 
   `).run(appId, name, platform, githubRepo, githubApiUrl, autoSync ? 1 : 0);
 }
 
+export function getAutoSyncApps() {
+  return db.prepare("SELECT * FROM apps WHERE auto_sync = 1 AND github_repo != ''").all();
+}
+
 export function updateApp(appId, fields) {
-  const allowed = ["name", "platform", "github_repo", "github_api_url", "auto_sync"];
+  const allowed = ["name", "platform", "github_repo", "github_api_url", "auto_sync", "last_synced_at", "last_sync_error"];
   const updates = [];
   const values = [];
   for (const [k, v] of Object.entries(fields)) {
@@ -31,6 +35,15 @@ export function updateApp(appId, fields) {
   updates.push("updated_at = datetime('now')");
   values.push(appId);
   db.prepare(`UPDATE apps SET ${updates.join(", ")} WHERE app_id = ?`).run(...values);
+}
+
+export function recordSyncResult(appId, { error = null } = {}) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE apps 
+    SET last_synced_at = ?, last_sync_error = ?, updated_at = datetime('now')
+    WHERE app_id = ?
+  `).run(now, error ? String(error) : null, appId);
 }
 
 export function deleteApp(appId) {

@@ -151,7 +151,7 @@ sudo mkdir -p /etc/nginx/ssl
 
 # ACME 验证路径
 sudo mkdir -p /var/www/acme-challenge
-sudo chown -R www-data:www-data /var/www/acme-challenge
+sudo chmod -R 755 /var/www/acme-challenge
 ```
 
 ### 3. 配置 Nginx 临时 HTTP 验证站点
@@ -208,16 +208,21 @@ sudo vim /etc/nginx/conf.d/app-release-hub.conf
 ```
 
 ```nginx
-# 1. HTTP 自动重定向到 HTTPS（保留 ACME 验证路径）
+# 1. HTTP 自动重定向到 HTTPS（严格排除 ACME 挑战目录，避免续签重定向失败）
 server {
     listen 80;
+    listen [::]:80;
     server_name release.yourcompany.com;
 
+    # 优先匹配并放行 ACME 验证请求（^~ 修饰符确保不再向下执行任何匹配或重定向）
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/acme-challenge;
         default_type "text/plain";
+        allow all;
+        try_files $uri =404;
     }
 
+    # 其余所有 HTTP 流量 301 强制跳转至 HTTPS
     location / {
         return 301 https://$host$request_uri;
     }

@@ -164,6 +164,8 @@ export async function getVersionForClient(appId, { currentVersionCode } = {}) {
         targetApkSha256: latest.sha256.toLowerCase(),
         fallbackUrl: resolveUrl(latest.fileUrl),
         fallbackSize: latest.size,
+        fallbackApkUrl: resolveUrl(latest.fileUrl),
+        fallbackApkSize: latest.size,
       };
     }
   }
@@ -172,6 +174,9 @@ export async function getVersionForClient(appId, { currentVersionCode } = {}) {
     ...base,
     updateType: "full",
     downloadUrl: resolveUrl(latest.fileUrl),
+    apkUrl: resolveUrl(latest.fileUrl),
+    fallbackApkUrl: resolveUrl(latest.fileUrl),
+    fallbackApkSize: latest.size,
     sha256: latest.sha256.toLowerCase(),
     size: latest.size,
   };

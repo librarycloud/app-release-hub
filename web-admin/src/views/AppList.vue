@@ -107,7 +107,7 @@
                   {{ app.platform.toUpperCase() }}
                 </el-tag>
                 <el-tag size="small" :type="app.autoSync ? 'success' : 'info'" effect="plain">
-                  {{ app.autoSync ? '自动同步' : '手动' }}
+                  {{ app.autoSync ? `🔄 ${formatInterval(app.autoSyncIntervalMinutes)}` : '手动同步' }}
                 </el-tag>
               </div>
             </div>
@@ -197,6 +197,29 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-form-item v-if="form.autoSync" label="自动同步周期">
+          <div style="display:flex;gap:10px;width:100%">
+            <el-select v-model="form.intervalPreset" style="width:160px" @change="onIntervalPresetChange">
+              <el-option label="每 15 分钟" :value="15" />
+              <el-option label="每 30 分钟" :value="30" />
+              <el-option label="每 1 小时" :value="60" />
+              <el-option label="每 2 小时" :value="120" />
+              <el-option label="每 6 小时" :value="360" />
+              <el-option label="每 12 小时" :value="720" />
+              <el-option label="每 24 小时 (1天)" :value="1440" />
+              <el-option label="自定义分钟" value="custom" />
+            </el-select>
+            <el-input-number
+              v-if="form.intervalPreset === 'custom'"
+              v-model="form.autoSyncIntervalMinutes"
+              :min="5"
+              :max="10080"
+              style="width:160px"
+              placeholder="分钟数(≥5)"
+            />
+          </div>
+          <span class="hint">按设定的时间间隔在后台检测 GitHub 是否发布新 Release</span>
+        </el-form-item>
         <el-form-item label="GitHub 仓库 (owner/repo)">
           <el-input v-model="form.githubRepo" placeholder="如 yourorg/your-repo（支持直接粘贴仓库 URL）" />
         </el-form-item>
@@ -239,8 +262,23 @@ const form = ref({
   githubRepo: "",
   githubApiUrl: "https://api.github.com",
   autoSync: false,
-  assetPattern: ""
+  autoSyncIntervalMinutes: 60,
+  intervalPreset: 60,
+  assetPattern: "",
 });
+
+function onIntervalPresetChange(val) {
+  if (val !== "custom") {
+    form.value.autoSyncIntervalMinutes = Number(val);
+  }
+}
+
+function formatInterval(minutes) {
+  const m = Number(minutes) || 60;
+  if (m < 60) return `每 ${m} 分钟`;
+  if (m % 60 === 0) return `每 ${m / 60} 小时`;
+  return `每 ${(m / 60).toFixed(1)} 小时`;
+}
 
 const autoSyncCount = computed(() => apps.value.filter((a) => a.autoSync).length);
 const platformCount = computed(() => new Set(apps.value.map((a) => a.platform)).size);
@@ -324,10 +362,30 @@ async function submitCreate() {
   if (!form.value.appId || !form.value.name) return ElMessage.warning("App ID 和名称为必填项");
   creating.value = true;
   try {
-    await createApp(form.value);
+    const payload = {
+      appId: form.value.appId,
+      name: form.value.name,
+      platform: form.value.platform,
+      githubRepo: form.value.githubRepo,
+      githubApiUrl: form.value.githubApiUrl,
+      autoSync: form.value.autoSync,
+      autoSyncIntervalMinutes: Number(form.value.autoSyncIntervalMinutes) || 60,
+      assetPattern: form.value.assetPattern,
+    };
+    await createApp(payload);
     ElMessage.success("App 注册成功");
     showCreate.value = false;
-    form.value = { appId: "", name: "", platform: "android", githubRepo: "", githubApiUrl: "https://api.github.com", autoSync: false, assetPattern: "" };
+    form.value = {
+      appId: "",
+      name: "",
+      platform: "android",
+      githubRepo: "",
+      githubApiUrl: "https://api.github.com",
+      autoSync: false,
+      autoSyncIntervalMinutes: 60,
+      intervalPreset: 60,
+      assetPattern: "",
+    };
     await load();
   } catch (e) {
     ElMessage.error(e?.message || "注册失败");

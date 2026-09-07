@@ -10,4 +10,24 @@ export default defineConfig({
       "/admin": { target: "http://localhost:3000", changeOrigin: true },
     },
   },
+  build: {
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            if (id.includes("element-plus")) {
+              return "element-plus";
+            }
+            if (id.includes("vue") || id.includes("vue-router")) {
+              return "vue-core";
+            }
+            if (id.includes("axios")) {
+              return "vendor-utils";
+            }
+          }
+        },
+      },
+    },
+  },
 });

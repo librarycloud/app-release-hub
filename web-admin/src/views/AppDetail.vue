@@ -38,6 +38,17 @@
         <div style="display:flex;align-items:center;gap:6px" v-if="appInfo">
           <span style="font-size:13px;color:#666">定时同步:</span>
           <el-switch v-model="appInfo.autoSync" @change="toggleAutoSync" />
+          <el-tag
+            v-if="appInfo.autoSync"
+            size="small"
+            type="success"
+            effect="plain"
+            style="cursor:pointer"
+            title="点击修改定时同步周期"
+            @click="openEditDialog"
+          >
+            {{ formatInterval(appInfo.autoSyncIntervalMinutes) }} ✏️
+          </el-tag>
         </div>
         <el-button @click="openEditDialog">
           ⚙️ 配置
@@ -309,6 +320,29 @@
         <el-form-item label="自动同步">
           <el-switch v-model="editForm.autoSync" />
         </el-form-item>
+        <el-form-item v-if="editForm.autoSync" label="同步检测周期">
+          <div style="display:flex;gap:10px;width:100%">
+            <el-select v-model="editForm.intervalPreset" style="width:160px" @change="onEditIntervalPresetChange">
+              <el-option label="每 15 分钟" :value="15" />
+              <el-option label="每 30 分钟" :value="30" />
+              <el-option label="每 1 小时" :value="60" />
+              <el-option label="每 2 小时" :value="120" />
+              <el-option label="每 6 小时" :value="360" />
+              <el-option label="每 12 小时" :value="720" />
+              <el-option label="每 24 小时 (1天)" :value="1440" />
+              <el-option label="自定义分钟" value="custom" />
+            </el-select>
+            <el-input-number
+              v-if="editForm.intervalPreset === 'custom'"
+              v-model="editForm.autoSyncIntervalMinutes"
+              :min="5"
+              :max="10080"
+              style="width:160px"
+              placeholder="分钟数(≥5)"
+            />
+          </div>
+          <span class="hint">系统按设定的时间周期在后台检测 GitHub 是否发布新 Release</span>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEditDialog = false">取消</el-button>
@@ -537,8 +571,25 @@ const manualForm = ref({
   changelogUrl: "",
 });
 
+function formatInterval(minutes) {
+  const m = Number(minutes) || 60;
+  if (m < 60) return `每 ${m} 分钟`;
+  if (m % 60 === 0) return `每 ${m / 60} 小时`;
+  return `每 ${(m / 60).toFixed(1)} 小时`;
+}
+
+function onEditIntervalPresetChange(val) {
+  if (val !== "custom") {
+    editForm.value.autoSyncIntervalMinutes = Number(val);
+  }
+}
+
 function openEditDialog() {
   if (!appInfo.value) return;
+  const currentMinutes = Number(appInfo.value.autoSyncIntervalMinutes) || 60;
+  const presets = [15, 30, 60, 120, 360, 720, 1440];
+  const isPreset = presets.includes(currentMinutes);
+
   editForm.value = {
     name: appInfo.value.name || "",
     platform: appInfo.value.platform || "android",
@@ -546,6 +597,8 @@ function openEditDialog() {
     githubApiUrl: appInfo.value.githubApiUrl || "https://api.github.com",
     assetPattern: appInfo.value.assetPattern || "",
     autoSync: Boolean(appInfo.value.autoSync),
+    autoSyncIntervalMinutes: currentMinutes,
+    intervalPreset: isPreset ? currentMinutes : "custom",
   };
   showEditDialog.value = true;
 }
@@ -554,7 +607,16 @@ async function submitEditApp() {
   if (!editForm.value.name) return ElMessage.warning("名称不能为空");
   savingApp.value = true;
   try {
-    await updateApp(appId, editForm.value);
+    const payload = {
+      name: editForm.value.name,
+      platform: editForm.value.platform,
+      githubRepo: editForm.value.githubRepo,
+      githubApiUrl: editForm.value.githubApiUrl,
+      assetPattern: editForm.value.assetPattern,
+      autoSync: editForm.value.autoSync,
+      autoSyncIntervalMinutes: Number(editForm.value.autoSyncIntervalMinutes) || 60,
+    };
+    await updateApp(appId, payload);
     ElMessage.success("App 配置已更新");
     showEditDialog.value = false;
     await load();

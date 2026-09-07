@@ -665,6 +665,7 @@ curl -X POST "https://hub.example.com/admin/apps" \
     "platform": "android",
     "githubRepo": "your-org/your-android-app",
     "autoSync": true,
+    "autoSyncIntervalMinutes": 30,
     "assetPattern": ".*-release\\.apk$"
   }'
 ```

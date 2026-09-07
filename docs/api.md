@@ -118,7 +118,7 @@
 
 #### 获取所有 App 列表
 - `GET /admin/apps`
-- 响应：返回所有已注册 App 数组，包含 `autoSync`、`assetPattern`、`lastSyncedAt`、`lastSyncError` 等字段。
+- 响应：返回所有已注册 App 数组，包含 `autoSync`、`autoSyncIntervalMinutes`、`assetPattern`、`lastSyncedAt`、`lastSyncError` 等字段。
 
 #### 注册新 App
 - `POST /admin/apps`
@@ -131,13 +131,17 @@
     "assetPattern": ".*\\.apk$",
     "githubRepo": "yourorg/your-repo",
     "githubApiUrl": "https://api.github.com",
-    "autoSync": true
+    "autoSync": true,
+    "autoSyncIntervalMinutes": 30
   }
   ```
+- 字段说明：
+  - `autoSync` (boolean): 是否开启后台自动定时检测。
+  - `autoSyncIntervalMinutes` (number): 独立自动检测周期（单位：分钟，默认为 60，最低支持 5 分钟）。
 
 #### 更新 App 配置
 - `PATCH /admin/apps/:appId`
-- 请求体：支持修改 `name`、`platform`、`githubRepo`、`githubApiUrl`、`assetPattern`、`autoSync` 等属性。
+- 请求体：支持修改 `name`、`platform`、`githubRepo`、`githubApiUrl`、`assetPattern`、`autoSync`、`autoSyncIntervalMinutes` 等属性。
 
 #### 删除 App
 - `DELETE /admin/apps/:appId`

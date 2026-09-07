@@ -37,8 +37,21 @@
       "v1.2.62: 优化网络传输与离线缓存",
       "v1.2.61: 修复部分分享问题"
     ],
+    "historyReleaseNotes": [
+      {
+        "versionCode": 162,
+        "versionName": "1.2.62",
+        "releaseNotes": ["新增配方智能校对", "优化网络传输与离线缓存"]
+      },
+      {
+        "versionCode": 161,
+        "versionName": "1.2.61",
+        "releaseNotes": ["修复部分分享问题"]
+      }
+    ],
     "changelogUrl": "https://github.com/yourorg/your-repo/releases/tag/v1.2.62",
     "publishedAt": "2026-09-06",
+    "downloadBaseUrl": "https://hub.example.com",
     "fromVersionCode": 158,
     "patchUrl": "/api/apps/android-main/patches/patch-v158-to-v162.patch",
     "patchSize": 1843200,
@@ -64,6 +77,16 @@
     "minVersionCode": 1,
     "forceUpdate": false,
     "releaseNotes": ["优化性能"],
+    "historyReleaseNotes": [
+      {
+        "versionCode": 162,
+        "versionName": "1.2.62",
+        "releaseNotes": ["优化性能"]
+      }
+    ],
+    "changelogUrl": "https://github.com/yourorg/your-repo/releases/tag/v1.2.62",
+    "publishedAt": "2026-09-06",
+    "downloadBaseUrl": "https://hub.example.com",
     "downloadUrl": "/api/apps/android-main/releases/release-v162.apk",
     "sha256": "9f8e7d6c...",
     "size": 52428800
@@ -131,11 +154,56 @@
 - `POST /admin/sync-all`
 - 行为：立即运行一轮后台检测，自动同步所有开启了 `autoSync: true` 的 App。
 
+#### 批量导入 GitHub 历史版本
+- `POST /admin/apps/:appId/sync-history`
+- 请求体：
+  ```json
+  {
+    "limit": 20,
+    "autoGeneratePatches": false
+  }
+  ```
+- 说明：
+  - 扫描指定 GitHub 仓库历史所有 Releases，拉取安装包与 `app-version.json` 元数据进行补录。
+  - 自动跳过已存在的完整版本，自动识别 release body 中的更新说明（无 json 时亦可兼容）。
+  - 智能重新计算系统全局最高版本，确保不会错误覆盖已有最新版本。
+  - `autoGeneratePatches`: 可选，为 true 时在历史版本导入后自动向最新版本生成差分补丁。
+
 ---
 
 ### 3. 版本与更新策略管理
 
-#### 更新版本配置（强制更新 / 最低兼容版本）
+#### 手动补录旧版本（支持本地文件上传或外部 URL）
+- `POST /admin/apps/:appId/versions`
+- **模式 A：上传本地安装包（Multipart 表单）**
+  - 请求头：`Content-Type: multipart/form-data`
+  - 表单字段：
+    - `versionCode` (数字, 必填): 如 10200
+    - `versionName` (字符串, 必填): 如 "1.2.0"
+    - `file` (文件): 本地安装包（.apk, .exe, .dmg 等）
+    - `publishedAt` (日期, 选填): "YYYY-MM-DD"
+    - `forceUpdate` (布尔, 选填): "true" / "false"
+    - `minVersionCode` (数字, 选填): 默认 1
+    - `releaseNotes` (换行分割字符串 或 JSON 数组, 选填)
+    - `changelogUrl` (字符串, 选填)
+- **模式 B：填写文件 URL / 本地路径（JSON 请求体）**
+  - 请求头：`Content-Type: application/json`
+  - 请求体：
+    ```json
+    {
+      "versionCode": 10200,
+      "versionName": "1.2.0",
+      "publishedAt": "2024-05-01",
+      "forceUpdate": false,
+      "minVersionCode": 1,
+      "releaseNotes": ["修复历史闪退问题", "优化网络连接"],
+      "fileUrl": "https://cdn.example.com/apps/app-v1.2.0.apk",
+      "sha256": "3a4b...",
+      "size": 25165824
+    }
+    ```
+
+#### 更新版本配置（强制更新 / 最低兼容版本 / 更新说明）
 - `PATCH /admin/apps/:appId/versions/:versionCode`
 - 请求体：
   ```json
@@ -149,6 +217,7 @@
 - 字段说明：
   - `forceUpdate` (boolean): 是否开启强制更新。开启后，低于此版本的客户端检测更新时均会标记 `forceUpdate: true`。
   - `minVersionCode` (number): 最低兼容版本号。客户端当前版本号低于此值时将触发强制更新。
+  - `releaseNotes` (array): 在线修改该版本的更新说明列表。
 
 #### 删除指定版本
 - `DELETE /admin/apps/:appId/versions/:versionCode`

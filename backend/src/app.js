@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
+import multipart from "@fastify/multipart";
 import { config } from "./config.js";
 import { initSchema } from "./db/schema.js";
 import { startAutoSyncScheduler } from "./services/autoSyncService.js";
@@ -13,6 +14,13 @@ initSchema();
 const fastify = Fastify({
   logger: { level: config.nodeEnv === "production" ? "warn" : "info" },
   trustProxy: true,
+});
+
+// Multipart file upload support (up to 500MB packages)
+await fastify.register(multipart, {
+  limits: {
+    fileSize: 500 * 1024 * 1024,
+  },
 });
 
 // CORS

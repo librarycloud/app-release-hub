@@ -3,11 +3,13 @@ import { copyFile, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import { config } from "../config.js";
+import { db } from "../db/index.js";
 import {
   getApp,
   getVersionHistory,
   getLatestVersion,
   getVersion,
+  formatVersion,
   deleteVersionRecord,
   upsertVersion,
   getPatchesForTarget,
@@ -418,4 +420,288 @@ export async function deleteReleaseVersion(appId, versionCode) {
     newLatestVersionCode: result?.newLatest ? Number(result.newLatest.version_code) : null,
   };
 }
+
+/**
+ * Re-determines and enforces the latest version based on highest version_code.
+ * Also synchronizes the releases/latest.{ext} physical file.
+ */
+export async function refreshAppLatestVersion(appId) {
+  const appRow = getApp(appId);
+  const ext = getFileExt(appRow?.platform);
+  const releaseDir = getReleaseDir(appId);
+  const history = getVersionHistory(appId);
+
+  if (history.length === 0) {
+    db.prepare("UPDATE versions SET is_latest = 0 WHERE app_id = ?").run(appId);
+    await rm(path.join(releaseDir, `latest.${ext}`), { force: true }).catch(() => {});
+    return null;
+  }
+
+  const maxVer = history[0]; // history is sorted by version_code DESC
+  const maxCode = Number(maxVer.version_code);
+
+  db.transaction(() => {
+    db.prepare("UPDATE versions SET is_latest = 0 WHERE app_id = ?").run(appId);
+    db.prepare("UPDATE versions SET is_latest = 1 WHERE app_id = ? AND version_code = ?").run(appId, maxCode);
+  })();
+
+  const maxFile = await findReleaseFileOnDisk(releaseDir, maxCode, ext);
+  const legacyFile = path.join(releaseDir, `latest.${ext}`);
+  try {
+    const s = await stat(maxFile);
+    if (s.isFile()) {
+      await copyFile(maxFile, legacyFile);
+    }
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      console.warn(`[releaseService] 拷贝 latest.${ext} 失败:`, err.message);
+    }
+  }
+
+  return maxCode;
+}
+
+/**
+ * Batch sync historical releases from GitHub for a given app.
+ */
+export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePatches = false } = {}) {
+  const appRow = getApp(appId);
+  if (!appRow) throw new Error(`App "${appId}" 不存在`);
+  if (!appRow.github_repo) throw new Error("githubRepo 未配置");
+
+  const token = config.resolveGithubToken(appId);
+  const platform = appRow.platform || "android";
+  const defaultExt = getFileExt(platform);
+  const base = String(appRow.github_api_url || "https://api.github.com").replace(/\/$/, "");
+  const headers = buildHeaders(token);
+  const githubContext = { base, repo: appRow.github_repo, headers, platform, assetPattern: appRow.asset_pattern || "" };
+
+  const perPage = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  const releasesRes = await fetchWithTimeout(
+    `${base}/repos/${appRow.github_repo}/releases?per_page=${perPage}`,
+    { headers },
+    metadataTimeoutMs
+  );
+  if (!releasesRes.ok) throw new Error(`GitHub API 请求失败: HTTP ${releasesRes.status}`);
+  const releases = await releasesRes.json();
+  if (!Array.isArray(releases)) throw new Error("GitHub 返回的 Release 列表无效");
+
+  const releaseDir = getReleaseDir(appId);
+  const patchDir = getPatchDir(appId);
+  await mkdir(releaseDir, { recursive: true });
+  await mkdir(patchDir, { recursive: true });
+
+  const importedVersions = [];
+  const skippedVersions = [];
+  const errors = [];
+
+  for (const release of releases) {
+    try {
+      const assets = release.assets || [];
+      const metaAsset = findMetadataAsset(assets, platform);
+      const fileAsset = findBinaryAsset(assets, {
+        platform,
+        assetPattern: appRow.asset_pattern || "",
+      });
+
+      if (!metaAsset || !fileAsset) {
+        skippedVersions.push({
+          tag: release.tag_name,
+          name: release.name,
+          reason: !metaAsset ? "未找到元数据文件 (app-version.json)" : "未找到安装包文件",
+        });
+        continue;
+      }
+
+      const metaRes = await fetchWithTimeout(metaAsset.browser_download_url, { headers }, metadataTimeoutMs);
+      if (!metaRes.ok) {
+        skippedVersions.push({ tag: release.tag_name, reason: `元数据下载失败: HTTP ${metaRes.status}` });
+        continue;
+      }
+      const metadata = await metaRes.json();
+
+      const versionCode = Number(metadata.versionCode);
+      const versionName = String(metadata.versionName || "").trim();
+      if (!Number.isInteger(versionCode) || versionCode < 1 || !versionName) {
+        skippedVersions.push({ tag: release.tag_name, reason: "元数据缺少有效 versionCode 或 versionName" });
+        continue;
+      }
+
+      const ext = path.extname(fileAsset.name).replace(/^\./, "").toLowerCase() || defaultExt;
+      const versionedFile = path.join(releaseDir, `release-v${versionCode}.${ext}`);
+      const existing = getVersion(appId, versionCode);
+
+      if (existing) {
+        let fileExists = false;
+        try {
+          const s = await stat(versionedFile);
+          fileExists = s.isFile();
+        } catch {}
+        if (fileExists) {
+          skippedVersions.push({ versionCode, versionName, tag: release.tag_name, reason: "已存在且文件完整" });
+          continue;
+        }
+      }
+
+      const tempFile = path.join(releaseDir, `.release-${versionCode}.tmp`);
+      try {
+        await downloadWithTimeout(fileAsset.browser_download_url, { headers }, tempFile, fileTimeoutMs);
+        await rename(tempFile, versionedFile);
+      } finally {
+        await rm(tempFile, { force: true }).catch(() => {});
+      }
+
+      const sha256 = await computeFileSha256(versionedFile);
+      const fileStat = await stat(versionedFile);
+
+      let changelogUrl = String(metadata.changelogUrl || "").trim();
+      const bodyMatch = String(release.body || "").match(/(https:\/\/github\.com\/[^\s\)>]+compare[^\s\)>]+)/i);
+      if (bodyMatch) changelogUrl = bodyMatch[1];
+      else if (!changelogUrl && release.html_url) changelogUrl = release.html_url;
+
+      let releaseNotes = Array.isArray(metadata.releaseNotes) && metadata.releaseNotes.length > 0
+        ? metadata.releaseNotes.map(String).filter(Boolean)
+        : [];
+      if (releaseNotes.length === 0 && release.body) {
+        releaseNotes = String(release.body)
+          .split("\n")
+          .map((l) => l.trim())
+          .filter((l) => /^[-*]\s+/.test(l))
+          .map((l) => l.replace(/^[-*]\s+/, "").replace(/\s+by\s+@[\w-]+(?:\s+in\s+https?:\/\/\S+)?$/i, "").trim())
+          .filter(Boolean);
+      }
+
+      upsertVersion(appId, {
+        versionCode,
+        versionName,
+        minVersionCode: Number.isInteger(Number(metadata.minVersionCode)) ? Number(metadata.minVersionCode) : 1,
+        forceUpdate: Boolean(metadata.forceUpdate),
+        releaseNotes,
+        changelogUrl,
+        publishedAt: String(metadata.publishedAt || release.published_at || "").slice(0, 10),
+        fileUrl: `/api/apps/${appId}/releases/release-v${versionCode}.${ext}`,
+        sha256,
+        size: fileStat.size,
+        isLatest: false,
+      });
+
+      importedVersions.push({ versionCode, versionName, tag: release.tag_name, size: fileStat.size });
+    } catch (err) {
+      errors.push({ tag: release.tag_name || release.name, error: err.message });
+    }
+  }
+
+  const latestCode = await refreshAppLatestVersion(appId);
+
+  let patchesResult = null;
+  if (autoGeneratePatches && latestCode) {
+    try {
+      patchesResult = await generateAllMissingPatchesForVersion(appId, latestCode, githubContext);
+    } catch (patchErr) {
+      console.warn(`[releaseService] 自动补齐差分包失败:`, patchErr.message);
+    }
+  }
+
+  return {
+    totalScanned: releases.length,
+    importedCount: importedVersions.length,
+    skippedCount: skippedVersions.length,
+    latestVersionCode: latestCode,
+    importedVersions,
+    skippedVersions,
+    errors,
+    patchesGenerated: patchesResult?.generatedCount || 0,
+  };
+}
+
+/**
+ * Manually create / backfill a historical version (with optional uploaded package file).
+ */
+export async function createManualVersion(appId, {
+  versionCode,
+  versionName,
+  releaseNotes,
+  publishedAt,
+  minVersionCode,
+  forceUpdate,
+  changelogUrl,
+  fileUrl,
+  sha256,
+  size,
+}, fileInfo = null) {
+  const appRow = getApp(appId);
+  if (!appRow) throw new Error(`App "${appId}" 不存在`);
+
+  const vCode = Number(versionCode);
+  if (!Number.isInteger(vCode) || vCode < 1) {
+    throw new Error("versionCode 必须为大于等于 1 的整数");
+  }
+
+  const vName = String(versionName || "").trim();
+  if (!vName) throw new Error("versionName 不能为空");
+
+  const existing = getVersion(appId, vCode);
+  if (existing) throw new Error(`版本 ${vCode} 已存在，不能重复补录`);
+
+  const platform = appRow.platform || "android";
+  const defaultExt = getFileExt(platform);
+  const releaseDir = getReleaseDir(appId);
+  await mkdir(releaseDir, { recursive: true });
+
+  let finalFileUrl = String(fileUrl || "").trim();
+  let finalSha256 = String(sha256 || "").trim();
+  let finalSize = Number(size) || 0;
+
+  if (fileInfo && fileInfo.filePath) {
+    const ext = path.extname(fileInfo.originalFilename || "").replace(/^\./, "").toLowerCase() || defaultExt;
+    const targetFile = path.join(releaseDir, `release-v${vCode}.${ext}`);
+    await copyFile(fileInfo.filePath, targetFile);
+    await rm(fileInfo.filePath, { force: true }).catch(() => {});
+
+    finalSha256 = await computeFileSha256(targetFile);
+    const fileStat = await stat(targetFile);
+    finalSize = fileStat.size;
+    finalFileUrl = `/api/apps/${appId}/releases/release-v${vCode}.${ext}`;
+  } else if (!finalFileUrl) {
+    const existingFile = await findReleaseFileOnDisk(releaseDir, vCode, defaultExt);
+    try {
+      const s = await stat(existingFile);
+      if (s.isFile()) {
+        finalSha256 = await computeFileSha256(existingFile);
+        finalSize = s.size;
+        finalFileUrl = `/api/apps/${appId}/releases/${path.basename(existingFile)}`;
+      }
+    } catch {}
+  }
+
+  const notesList = Array.isArray(releaseNotes)
+    ? releaseNotes.map(String).map((s) => s.trim()).filter(Boolean)
+    : String(releaseNotes || "")
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+  upsertVersion(appId, {
+    versionCode: vCode,
+    versionName: vName,
+    minVersionCode: Number.isInteger(Number(minVersionCode)) ? Number(minVersionCode) : 1,
+    forceUpdate: Boolean(forceUpdate),
+    releaseNotes: notesList,
+    changelogUrl: String(changelogUrl || "").trim(),
+    publishedAt: String(publishedAt || new Date().toISOString().slice(0, 10)),
+    fileUrl: finalFileUrl,
+    sha256: finalSha256,
+    size: finalSize,
+    isLatest: false,
+  });
+
+  const latestCode = await refreshAppLatestVersion(appId);
+  const row = getVersion(appId, vCode);
+
+  return {
+    ...formatVersion(row),
+    isLatest: latestCode === vCode,
+  };
+}
+
 

@@ -31,22 +31,34 @@
           </span>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:12px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <div style="display:flex;align-items:center;gap:6px" v-if="appInfo">
           <span style="font-size:13px;color:#666">定时同步:</span>
           <el-switch v-model="appInfo.autoSync" @change="toggleAutoSync" />
         </div>
         <el-button @click="openEditDialog">
-          ⚙️ 编辑配置
+          ⚙️ 配置
+        </el-button>
+        <el-button @click="openSyncHistoryDialog">
+          📥 批量导入历史
+        </el-button>
+        <el-button @click="openManualVersionDialog">
+          ➕ 补录旧版本
         </el-button>
         <el-button type="primary" :loading="syncing" @click="doSync">
-          🔄 同步 GitHub 最新 Release
+          🔄 同步最新 Release
         </el-button>
       </div>
     </div>
 
     <div v-loading="loading">
-      <el-empty v-if="versionGroups.length === 0" description="暂无版本记录，请先同步 GitHub Release" />
+      <el-empty v-if="versionGroups.length === 0" description="暂无版本记录">
+        <div style="display:flex;gap:12px;justify-content:center;margin-top:12px">
+          <el-button type="primary" :loading="syncing" @click="doSync">🔄 同步最新 Release</el-button>
+          <el-button @click="openSyncHistoryDialog">📥 批量导入 GitHub 历史</el-button>
+          <el-button @click="openManualVersionDialog">➕ 手动补录旧版本</el-button>
+        </div>
+      </el-empty>
 
       <!-- Version groups -->
       <el-collapse v-model="openGroups" accordion>
@@ -300,6 +312,152 @@
         <el-button type="primary" :loading="savingApp" @click="submitEditApp">保存配置</el-button>
       </template>
     </el-dialog>
+
+    <!-- Sync Historical Releases Dialog -->
+    <el-dialog
+      v-model="showSyncHistoryDialog"
+      title="批量导入 GitHub 历史版本"
+      width="520px"
+      :close-on-click-modal="false"
+    >
+      <div style="margin-bottom:16px;font-size:13px;color:#606266;line-height:1.6">
+        💡 系统将扫描并同步 <strong>{{ appInfo?.githubRepo || appId }}</strong> 历史 Releases，自动下载安装包与元数据，并安全维护版本序列（不会错误覆盖现有更高版本）。
+      </div>
+      <el-form label-width="130px">
+        <el-form-item label="扫描数量上限">
+          <el-input-number v-model="syncHistoryForm.limit" :min="1" :max="100" style="width:160px" />
+          <span style="font-size:12px;color:#909399;margin-left:10px">最近 1~100 个 Release</span>
+        </el-form-item>
+        <el-form-item label="自动生成差分">
+          <el-switch v-model="syncHistoryForm.autoGeneratePatches" active-text="开启" inactive-text="关闭" />
+          <span style="font-size:12px;color:#909399;margin-left:10px">导入后自动生成向最新版的差分包</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showSyncHistoryDialog = false">取消</el-button>
+        <el-button type="primary" :loading="syncingHistory" @click="submitSyncHistory">
+          开始批量导入
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Manual Version Backfill Dialog -->
+    <el-dialog
+      v-model="showManualVersionDialog"
+      title="手动补录历史版本"
+      width="600px"
+      :close-on-click-modal="false"
+    >
+      <el-form label-width="120px">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="Version Code" required>
+              <el-input-number
+                v-model="manualForm.versionCode"
+                :min="1"
+                placeholder="如 10200"
+                style="width:100%"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="Version Name" required>
+              <el-input v-model="manualForm.versionName" placeholder="如 1.2.0" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="发布日期">
+              <el-date-picker
+                v-model="manualForm.publishedAt"
+                type="date"
+                placeholder="选择发布日期"
+                value-format="YYYY-MM-DD"
+                style="width:100%"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="最低兼容版本">
+              <el-input-number
+                v-model="manualForm.minVersionCode"
+                :min="1"
+                placeholder="默认 1"
+                style="width:100%"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-form-item label="强制更新">
+          <el-switch v-model="manualForm.forceUpdate" active-text="开启" inactive-text="关闭" />
+          <span style="font-size:12px;color:#909399;margin-left:12px">开启后低于此版本的用户必须升级</span>
+        </el-form-item>
+
+        <el-form-item label="安装包提供方式">
+          <el-radio-group v-model="manualPackageMode">
+            <el-radio-button label="file">本地上传安装包</el-radio-button>
+            <el-radio-button label="url">填写下载 URL / 留空探测</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item v-if="manualPackageMode === 'file'" label="安装包文件">
+          <el-upload
+            ref="manualUploadRef"
+            :auto-upload="false"
+            :limit="1"
+            :on-change="handleFileChange"
+            :on-remove="() => { manualFile = null; }"
+            drag
+            style="width:100%"
+          >
+            <div class="el-upload__text">将安装包拖到此处，或 <em>点击选取文件</em></div>
+            <template #tip>
+              <div class="el-upload__tip">支持 APK、AAB、EXE、DMG、ZIP 等格式，系统将自动计算 SHA-256 与文件大小</div>
+            </template>
+          </el-upload>
+        </el-form-item>
+
+        <template v-else>
+          <el-form-item label="文件 URL / 路径">
+            <el-input v-model="manualForm.fileUrl" placeholder="如 https://example.com/app-v1.2.0.apk 或留空自动寻找已存在文件" />
+          </el-form-item>
+          <el-row :gutter="16">
+            <el-col :span="14">
+              <el-form-item label="文件 SHA-256">
+                <el-input v-model="manualForm.sha256" placeholder="选填，64位哈希" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="10">
+              <el-form-item label="大小 (字节)">
+                <el-input-number v-model="manualForm.size" :min="0" placeholder="选填" style="width:100%" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </template>
+
+        <el-form-item label="更新说明">
+          <el-input
+            v-model="manualForm.releaseNotes"
+            type="textarea"
+            :rows="4"
+            placeholder="每行输入一条说明，例如：&#10;修复历史版本闪退问题&#10;新增数据同步支持"
+          />
+        </el-form-item>
+
+        <el-form-item label="Changelog 链接">
+          <el-input v-model="manualForm.changelogUrl" placeholder="选填，如 https://github.com/.../compare/..." />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showManualVersionDialog = false">取消</el-button>
+        <el-button type="primary" :loading="savingManualVersion" @click="submitManualVersion">
+          确认补录
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -311,6 +469,8 @@ import {
   listApps,
   updateApp,
   syncRelease,
+  syncHistoryReleases,
+  createVersion,
   getPatchMatrix,
   generateAllPatches,
   generatePatch,
@@ -344,6 +504,33 @@ const editForm = ref({
   githubApiUrl: "https://api.github.com",
   assetPattern: "",
   autoSync: false,
+});
+
+// Sync history dialog
+const showSyncHistoryDialog = ref(false);
+const syncingHistory = ref(false);
+const syncHistoryForm = ref({
+  limit: 20,
+  autoGeneratePatches: false,
+});
+
+// Manual version dialog
+const showManualVersionDialog = ref(false);
+const savingManualVersion = ref(false);
+const manualPackageMode = ref("file"); // "file" | "url"
+const manualUploadRef = ref(null);
+const manualFile = ref(null);
+const manualForm = ref({
+  versionCode: null,
+  versionName: "",
+  publishedAt: new Date().toISOString().slice(0, 10),
+  forceUpdate: false,
+  minVersionCode: 1,
+  fileUrl: "",
+  sha256: "",
+  size: null,
+  releaseNotes: "",
+  changelogUrl: "",
 });
 
 function openEditDialog() {
@@ -530,6 +717,105 @@ async function saveReleaseNotes() {
     ElMessage.error(e?.message || "保存失败");
   } finally {
     savingNotes.value = false;
+  }
+}
+
+function openSyncHistoryDialog() {
+  syncHistoryForm.value = {
+    limit: 20,
+    autoGeneratePatches: false,
+  };
+  showSyncHistoryDialog.value = true;
+}
+
+async function submitSyncHistory() {
+  syncingHistory.value = true;
+  try {
+    const res = await syncHistoryReleases(appId, syncHistoryForm.value);
+    const d = res.data || {};
+    ElNotification({
+      title: "历史版本同步完成",
+      message: `扫描 ${d.totalScanned || 0} 个 Release，成功导入 ${d.importedCount || 0} 个版本，跳过 ${d.skippedCount || 0} 个${d.patchesGenerated ? `，自动生成 ${d.patchesGenerated} 个补丁` : ""}`,
+      type: "success",
+      duration: 6000,
+    });
+    showSyncHistoryDialog.value = false;
+    await load();
+  } catch (err) {
+    ElMessage.error(err?.message || "同步历史版本失败");
+  } finally {
+    syncingHistory.value = false;
+  }
+}
+
+function openManualVersionDialog() {
+  manualFile.value = null;
+  manualPackageMode.value = "file";
+  manualForm.value = {
+    versionCode: null,
+    versionName: "",
+    publishedAt: new Date().toISOString().slice(0, 10),
+    forceUpdate: false,
+    minVersionCode: 1,
+    fileUrl: "",
+    sha256: "",
+    size: null,
+    releaseNotes: "",
+    changelogUrl: "",
+  };
+  if (manualUploadRef.value) {
+    manualUploadRef.value.clearFiles();
+  }
+  showManualVersionDialog.value = true;
+}
+
+function handleFileChange(uploadFile) {
+  manualFile.value = uploadFile.raw;
+}
+
+async function submitManualVersion() {
+  if (!manualForm.value.versionCode || manualForm.value.versionCode < 1) {
+    return ElMessage.warning("请填写正确的 versionCode (正整数)");
+  }
+  if (!manualForm.value.versionName) {
+    return ElMessage.warning("请填写 versionName");
+  }
+
+  savingManualVersion.value = true;
+  try {
+    if (manualPackageMode.value === "file" && manualFile.value) {
+      const fd = new FormData();
+      fd.append("file", manualFile.value);
+      fd.append("versionCode", manualForm.value.versionCode);
+      fd.append("versionName", manualForm.value.versionName);
+      if (manualForm.value.publishedAt) fd.append("publishedAt", manualForm.value.publishedAt);
+      fd.append("forceUpdate", manualForm.value.forceUpdate);
+      if (manualForm.value.minVersionCode) fd.append("minVersionCode", manualForm.value.minVersionCode);
+      if (manualForm.value.changelogUrl) fd.append("changelogUrl", manualForm.value.changelogUrl);
+      if (manualForm.value.releaseNotes) fd.append("releaseNotes", manualForm.value.releaseNotes);
+      await createVersion(appId, fd, true);
+    } else {
+      await createVersion(appId, {
+        versionCode: Number(manualForm.value.versionCode),
+        versionName: manualForm.value.versionName,
+        publishedAt: manualForm.value.publishedAt,
+        forceUpdate: manualForm.value.forceUpdate,
+        minVersionCode: Number(manualForm.value.minVersionCode) || 1,
+        changelogUrl: manualForm.value.changelogUrl,
+        releaseNotes: manualForm.value.releaseNotes,
+        fileUrl: manualForm.value.fileUrl,
+        sha256: manualForm.value.sha256,
+        size: manualForm.value.size ? Number(manualForm.value.size) : undefined,
+      }, false);
+    }
+
+    ElMessage.success(`版本 v${manualForm.value.versionName} 补录成功！`);
+    showManualVersionDialog.value = false;
+    await load();
+  } catch (err) {
+    ElMessage.error(err?.message || "补录版本失败");
+  } finally {
+    savingManualVersion.value = false;
   }
 }
 

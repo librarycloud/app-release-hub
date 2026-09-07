@@ -1,5 +1,6 @@
-import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { stat, mkdir, rm } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
 import path from "node:path";
 import { config } from "../config.js";
 import { getApp, recordSyncResult } from "../services/storageAdapter.js";
@@ -15,6 +16,8 @@ import {
   generatePatchBetweenVersions,
   generateAllMissingPatchesForVersion,
   deleteReleaseVersion,
+  syncHistoricalReleases,
+  createManualVersion,
 } from "../services/releaseService.js";
 import { getVersionForClient, getPatchMatrix, updateVersionConfig } from "../services/versionService.js";
 
@@ -185,5 +188,79 @@ export async function deleteVersionController(request, reply) {
   if (!app) return;
   const result = await deleteReleaseVersion(appId, versionCode);
   return ok(reply, result, `版本 v${versionCode} 及关联差分包已删除`);
+}
+
+export async function syncHistoryReleasesController(request, reply) {
+  const { appId } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+  const { limit = 20, autoGeneratePatches = false } = request.body || {};
+  const result = await syncHistoricalReleases(appId, { limit, autoGeneratePatches });
+  return ok(reply, result, `已同步历史版本 (导入 ${result.importedCount} 个，跳过 ${result.skippedCount} 个)`);
+}
+
+export async function createVersionController(request, reply) {
+  const { appId } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+
+  if (request.isMultipart()) {
+    const parts = request.parts();
+    const fields = {};
+    let tempFilePath = null;
+    let originalFilename = null;
+
+    try {
+      for await (const part of parts) {
+        if (part.type === "file") {
+          originalFilename = part.filename;
+          const uploadDir = path.join(appFilesDir(appId), "uploads");
+          await mkdir(uploadDir, { recursive: true });
+          const tmpName = `.upload-${Date.now()}-${Math.random().toString(36).slice(2)}${path.extname(part.filename || "")}`;
+          tempFilePath = path.join(uploadDir, tmpName);
+          await pipeline(part.file, createWriteStream(tempFilePath));
+        } else {
+          fields[part.fieldname] = part.value;
+        }
+      }
+
+      let releaseNotes = fields.releaseNotes;
+      if (typeof releaseNotes === "string" && releaseNotes.trim().startsWith("[")) {
+        try {
+          const parsed = JSON.parse(releaseNotes);
+          if (Array.isArray(parsed)) releaseNotes = parsed;
+        } catch {}
+      }
+
+      const fileInfo = tempFilePath ? { filePath: tempFilePath, originalFilename } : null;
+      const result = await createManualVersion(
+        appId,
+        {
+          versionCode: fields.versionCode,
+          versionName: fields.versionName,
+          releaseNotes,
+          publishedAt: fields.publishedAt,
+          minVersionCode: fields.minVersionCode,
+          forceUpdate: fields.forceUpdate === "true" || fields.forceUpdate === true || fields.forceUpdate === "1" || fields.forceUpdate === 1,
+          changelogUrl: fields.changelogUrl,
+          fileUrl: fields.fileUrl,
+          sha256: fields.sha256,
+          size: fields.size,
+        },
+        fileInfo
+      );
+
+      return reply.code(201).send({ code: 0, message: "版本创建成功", data: result });
+    } catch (err) {
+      if (tempFilePath) {
+        await rm(tempFilePath, { force: true }).catch(() => {});
+      }
+      throw err;
+    }
+  } else {
+    const body = request.body || {};
+    const result = await createManualVersion(appId, body, null);
+    return reply.code(201).send({ code: 0, message: "版本创建成功", data: result });
+  }
 }
 

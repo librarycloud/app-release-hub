@@ -64,6 +64,25 @@ export function getVersion(appId, versionCode) {
   return db.prepare("SELECT * FROM versions WHERE app_id = ? AND version_code = ?").get(appId, Number(versionCode)) || null;
 }
 
+export function formatVersion(row) {
+  if (!row) return null;
+  return {
+    versionCode: Number(row.version_code),
+    versionName: row.version_name,
+    minVersionCode: Number(row.min_version_code),
+    forceUpdate: Boolean(row.force_update),
+    releaseNotes: Array.isArray(row.release_notes)
+      ? row.release_notes
+      : JSON.parse(row.release_notes || "[]"),
+    changelogUrl: row.changelog_url,
+    publishedAt: row.published_at,
+    fileUrl: row.file_url,
+    sha256: row.sha256,
+    size: row.size,
+    isLatest: Boolean(row.is_latest),
+  };
+}
+
 export function upsertVersion(appId, ver) {
   // Atomically: clear previous latest flag if this is latest, then upsert
   const upsert = db.transaction(() => {

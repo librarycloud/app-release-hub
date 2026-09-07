@@ -11,6 +11,8 @@ import {
   syncAllAppsController,
   updateVersionController,
   deleteVersionController,
+  syncHistoryReleasesController,
+  createVersionController,
 } from "../controllers/appController.js";
 
 const auth = { preHandler: [apiKeyAuth] };
@@ -25,8 +27,10 @@ export default async function adminRoutes(fastify) {
   // Release management
   fastify.post("/admin/sync-all", auth, syncAllAppsController);
   fastify.post("/admin/apps/:appId/sync", auth, syncReleaseController);
+  fastify.post("/admin/apps/:appId/sync-history", auth, syncHistoryReleasesController);
 
   // Version management
+  fastify.post("/admin/apps/:appId/versions", auth, createVersionController);
   fastify.patch("/admin/apps/:appId/versions/:versionCode", auth, updateVersionController);
   fastify.delete("/admin/apps/:appId/versions/:versionCode", auth, deleteVersionController);
 

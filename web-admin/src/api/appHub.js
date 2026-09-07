@@ -29,9 +29,12 @@ export const deleteApp = (appId) => http.delete(`/admin/apps/${appId}`);
 
 // ─── Release ─────────────────────────────────────────────────────────────────
 export const syncRelease = (appId) => http.post(`/admin/apps/${appId}/sync`);
+export const syncHistoryReleases = (appId, data) => http.post(`/admin/apps/${appId}/sync-history`, data);
 export const syncAllApps = () => http.post("/admin/sync-all");
 
 // ─── Versions ────────────────────────────────────────────────────────────────
+export const createVersion = (appId, data, isMultipart = false) =>
+  http.post(`/admin/apps/${appId}/versions`, data, isMultipart ? { headers: { "Content-Type": "multipart/form-data" } } : {});
 export const updateVersion = (appId, versionCode, data) => http.patch(`/admin/apps/${appId}/versions/${versionCode}`, data);
 export const deleteVersion = (appId, versionCode) => http.delete(`/admin/apps/${appId}/versions/${versionCode}`);
 

@@ -223,12 +223,12 @@ describe("Version Management & Force Update Tests", () => {
     const data = clientResCross.json().data;
     expect(data.releaseNotes).toEqual([
       "【v1.0.2】",
-      "• 优化启动性能",
-      "• 适配最新系统",
+      "优化启动性能",
+      "适配最新系统",
       "",
       "【v1.0.1】",
-      "• 新增聊天功能",
-      "• 修复闪退问题",
+      "新增聊天功能",
+      "修复闪退问题",
     ]);
     expect(data.historyReleaseNotes).toEqual([
       {

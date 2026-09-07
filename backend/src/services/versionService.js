@@ -27,12 +27,12 @@ function formatVersionTag(versionName, versionCode) {
  * Example output:
  * [
  *   "【v1.2.3】",
- *   "• 更新了xx",
- *   "• 修复了xx",
+ *   "更新了xx",
+ *   "修复了xx",
  *   "",
  *   "【v1.2.2】",
- *   "• 更新了xx",
- *   "• 修复了xx"
+ *   "更新了xx",
+ *   "修复了xx"
  * ]
  */
 function buildGroupedCumulativeNotes(versionList) {
@@ -47,7 +47,7 @@ function buildGroupedCumulativeNotes(versionList) {
       const tagPattern = new RegExp(`^(\\[|【)?${tag}(\\]|】|:|：|\\s)\\s*`, "i");
       clean = clean.replace(tagPattern, "");
       if (clean) {
-        validNotes.push(`• ${clean}`);
+        validNotes.push(clean);
       }
     }
 

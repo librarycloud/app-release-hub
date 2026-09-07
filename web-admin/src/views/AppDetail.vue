@@ -157,24 +157,42 @@
               <span class="sub-card-title">📦 安装包元数据</span>
               <span class="sub-card-hint" v-if="group.publishedAt">发布于: {{ group.publishedAt }}</span>
             </div>
-            <el-descriptions :column="descriptionsColumn" border size="small">
-              <el-descriptions-item label="完整包大小">{{ formatSize(group.size) }}</el-descriptions-item>
-              <el-descriptions-item label="发布日期">{{ group.publishedAt || "—" }}</el-descriptions-item>
-              <el-descriptions-item label="强制更新状态">
-                <el-tag :type="group.forceUpdate ? 'danger' : 'info'" size="small">
-                  {{ group.forceUpdate ? '已开启（所有用户强制更新）' : '未开启（常规更新）' }}
-                </el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item label="最低兼容版本">
-                <span>vc &ge; {{ group.minVersionCode || 1 }}</span>
-              </el-descriptions-item>
-              <el-descriptions-item label="SHA-256" :span="descriptionsColumn">
-                <code class="sha">{{ group.sha256 || "—" }}</code>
-              </el-descriptions-item>
-              <el-descriptions-item label="下载链接" :span="descriptionsColumn">
-                <a :href="group.downloadUrl" target="_blank" class="dl-link">{{ group.downloadUrl }}</a>
-              </el-descriptions-item>
-            </el-descriptions>
+            <div class="meta-grid">
+              <div class="meta-row">
+                <span class="meta-label">完整包大小</span>
+                <span class="meta-val">
+                  <el-tag size="small" type="info">{{ formatSize(group.size) }}</el-tag>
+                </span>
+              </div>
+              <div class="meta-row">
+                <span class="meta-label">发布日期</span>
+                <span class="meta-val">{{ group.publishedAt || "—" }}</span>
+              </div>
+              <div class="meta-row">
+                <span class="meta-label">强制更新状态</span>
+                <span class="meta-val">
+                  <el-tag :type="group.forceUpdate ? 'danger' : 'info'" size="small">
+                    {{ group.forceUpdate ? '已开启（全员强制更新）' : '未开启（常规更新）' }}
+                  </el-tag>
+                </span>
+              </div>
+              <div class="meta-row">
+                <span class="meta-label">最低兼容版本</span>
+                <span class="meta-val">vc &ge; {{ group.minVersionCode || 1 }}</span>
+              </div>
+              <div class="meta-row full-width">
+                <span class="meta-label">SHA-256</span>
+                <span class="meta-val">
+                  <code class="sha">{{ group.sha256 || "—" }}</code>
+                </span>
+              </div>
+              <div class="meta-row full-width">
+                <span class="meta-label">下载链接</span>
+                <span class="meta-val">
+                  <a :href="group.downloadUrl" target="_blank" class="dl-link">{{ group.downloadUrl }}</a>
+                </span>
+              </div>
+            </div>
           </div>
 
           <!-- Release notes -->
@@ -225,24 +243,32 @@
                   </template>
                 </el-table-column>
                 <el-table-column label="生成时间" prop="createdAt" width="150" />
-                <el-table-column label="操作" width="170">
+                <el-table-column label="操作" width="200">
                   <template #default="{ row }">
-                    <div style="display:flex;align-items:center;gap:6px">
-                      <el-button size="small" @click="copyLink(row.patchUrl)">复制链接</el-button>
+                    <div class="table-actions">
+                      <el-button
+                        size="small"
+                        class="action-btn copy-btn"
+                        @click="copyLink(row.patchUrl)"
+                      >
+                        🔗 复制链接
+                      </el-button>
                       <el-popover
                         v-if="row.cumulativeReleaseNotes && row.cumulativeReleaseNotes.length > 0"
                         placement="left"
-                        :width="320"
+                        :width="340"
                         trigger="click"
                       >
                         <template #reference>
-                          <el-button size="small" type="info" plain>说明叠加</el-button>
+                          <el-button size="small" class="action-btn notes-btn">
+                            📋 说明 ({{ row.cumulativeReleaseNotes.length }})
+                          </el-button>
                         </template>
-                        <div style="font-weight:600;margin-bottom:8px;font-size:13px">
+                        <div class="popover-title">
                           从 {{ row.fromVersionName }} 升级将收到的叠加说明 ({{ row.cumulativeReleaseNotes.length }} 条)：
                         </div>
-                        <div style="max-height:240px;overflow-y:auto">
-                          <ul style="margin:0;padding-left:16px;font-size:12px;line-height:1.7;color:var(--app-text-main)">
+                        <div class="popover-content">
+                          <ul class="popover-list">
                             <li v-for="(item, idx) in row.cumulativeReleaseNotes" :key="idx">{{ item }}</li>
                           </ul>
                         </div>
@@ -1000,26 +1026,27 @@ onUnmounted(() => {
   color: #f59e0b;
 }
 
-/* Version Collapse Cards */
+/* Version Collapse Container - Connected single card */
 .version-collapse {
-  border: none !important;
-  background: transparent !important;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  border: 1px solid var(--app-card-border) !important;
+  background: var(--app-card-bg) !important;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--app-card-shadow);
 }
 
 :deep(.version-collapse .el-collapse-item) {
   background: var(--app-card-bg);
-  border: 1px solid var(--app-card-border);
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: var(--app-card-shadow);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  border-bottom: 1px solid var(--app-card-border);
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
 
-:deep(.version-collapse .el-collapse-item:hover) {
-  border-color: rgba(59, 130, 246, 0.35);
+:deep(.version-collapse .el-collapse-item:last-child) {
+  border-bottom: none;
 }
 
 :deep(.version-collapse .el-collapse-item__header) {
@@ -1032,8 +1059,13 @@ onUnmounted(() => {
   transition: background 0.2s ease, border-color 0.2s ease;
 }
 
+:deep(.version-collapse .el-collapse-item:not(.is-active) .el-collapse-item__header:hover) {
+  background: var(--app-surface-subtle);
+}
+
 :deep(.version-collapse .el-collapse-item.is-active .el-collapse-item__header) {
   border-bottom: 1px solid var(--app-card-border);
+  background: var(--app-surface-subtle);
 }
 
 :deep(.version-collapse .el-collapse-item__wrap) {
@@ -1042,7 +1074,7 @@ onUnmounted(() => {
 }
 
 :deep(.version-collapse .el-collapse-item__content) {
-  padding: 18px 20px 6px 20px !important;
+  padding: 18px 20px 8px 20px !important;
   background: var(--app-card-bg);
   box-sizing: border-box;
 }
@@ -1160,42 +1192,45 @@ onUnmounted(() => {
   user-select: none;
 }
 
-/* Section 2: Full Info (Descriptions) */
+/* Section 2: Full Info Metadata Grid (Clean, no nested table box) */
 .full-info {
   overflow: hidden;
 }
 
-:deep(.full-info .el-descriptions) {
-  width: 100%;
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px 24px;
+  padding: 2px 0;
 }
 
-:deep(.full-info .el-descriptions__table) {
-  table-layout: fixed !important;
-  width: 100% !important;
-  background: var(--app-card-bg) !important;
-  border: 1px solid var(--app-card-border) !important;
-  border-radius: 8px;
-  overflow: hidden;
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  min-width: 0;
 }
 
-:deep(.full-info .el-descriptions__label) {
-  width: 110px !important;
-  max-width: 110px !important;
-  white-space: nowrap;
+.meta-row.full-width {
+  grid-column: 1 / -1;
+  align-items: flex-start;
+}
+
+.meta-label {
+  width: 96px;
+  flex-shrink: 0;
+  color: var(--app-text-muted);
   font-weight: 500;
-  box-sizing: border-box;
-  background: var(--app-surface-subtle) !important;
-  color: var(--app-text-sub) !important;
-  border-color: var(--app-card-border) !important;
+  font-size: 13px;
 }
 
-:deep(.full-info .el-descriptions__content) {
-  word-break: break-all !important;
-  overflow-wrap: anywhere !important;
-  box-sizing: border-box;
-  background: var(--app-card-bg) !important;
-  color: var(--app-text-main) !important;
-  border-color: var(--app-card-border) !important;
+.meta-val {
+  flex: 1;
+  min-width: 0;
+  color: var(--app-text-main);
+  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .sha {
@@ -1204,7 +1239,11 @@ onUnmounted(() => {
   overflow-wrap: anywhere;
   font-family: monospace;
   color: var(--app-text-muted);
-  display: block;
+  background: var(--app-card-bg);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--app-card-border);
+  display: inline-block;
   line-height: 1.4;
 }
 
@@ -1214,7 +1253,7 @@ onUnmounted(() => {
   word-break: break-all;
   overflow-wrap: anywhere;
   font-family: monospace;
-  display: block;
+  display: inline-block;
   line-height: 1.4;
 }
 
@@ -1264,6 +1303,99 @@ onUnmounted(() => {
   --el-table-tr-bg-color: var(--app-card-bg);
   --el-table-header-bg-color: var(--app-surface-subtle);
   --el-table-border-color: var(--app-card-border);
+}
+
+/* Table Action Buttons */
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  height: 28px !important;
+  padding: 0 10px !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
+}
+
+.action-btn.copy-btn {
+  background: rgba(59, 130, 246, 0.08) !important;
+  color: #2563eb !important;
+  border: 1px solid rgba(59, 130, 246, 0.22) !important;
+}
+
+.action-btn.copy-btn:hover {
+  background: rgba(59, 130, 246, 0.16) !important;
+  color: #1d4ed8 !important;
+  border-color: rgba(59, 130, 246, 0.45) !important;
+  transform: translateY(-1px);
+}
+
+.action-btn.notes-btn {
+  background: rgba(16, 185, 129, 0.08) !important;
+  color: #059669 !important;
+  border: 1px solid rgba(16, 185, 129, 0.22) !important;
+}
+
+.action-btn.notes-btn:hover {
+  background: rgba(16, 185, 129, 0.16) !important;
+  color: #047857 !important;
+  border-color: rgba(16, 185, 129, 0.45) !important;
+  transform: translateY(-1px);
+}
+
+[data-theme="dark"] .action-btn.copy-btn {
+  background: rgba(59, 130, 246, 0.14) !important;
+  color: #60a5fa !important;
+  border: 1px solid rgba(59, 130, 246, 0.3) !important;
+}
+
+[data-theme="dark"] .action-btn.copy-btn:hover {
+  background: rgba(59, 130, 246, 0.24) !important;
+  color: #93c5fd !important;
+  border-color: rgba(59, 130, 246, 0.5) !important;
+}
+
+[data-theme="dark"] .action-btn.notes-btn {
+  background: rgba(16, 185, 129, 0.14) !important;
+  color: #34d399 !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+}
+
+[data-theme="dark"] .action-btn.notes-btn:hover {
+  background: rgba(16, 185, 129, 0.24) !important;
+  color: #6ee7b7 !important;
+  border-color: rgba(16, 185, 129, 0.5) !important;
+}
+
+/* Popover Content */
+.popover-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 8px;
+  color: var(--app-text-main);
+  line-height: 1.4;
+}
+
+.popover-content {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.popover-list {
+  margin: 0 0 0 16px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--app-text-sub);
 }
 
 .missing-list {

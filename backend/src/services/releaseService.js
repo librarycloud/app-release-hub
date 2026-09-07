@@ -26,6 +26,9 @@ const fileTimeoutMs = 180_000;
 /** In-flight patch generation dedup lock */
 const inFlightPatches = new Map();
 
+/** In-flight release sync dedup lock */
+const inFlightSyncs = new Map();
+
 function getAppFilesDir(appId) {
   return path.resolve(config.filesDir, appId);
 }
@@ -238,7 +241,20 @@ export async function generateAllMissingPatchesForVersion(appId, targetVersionCo
 /**
  * Sync latest release from a GitHub repository for a given app.
  */
-export async function syncLatestRelease(appId, { githubRepo, githubApiUrl = "https://api.github.com", token = "", platform = "android", assetPattern = "" }) {
+export async function syncLatestRelease(appId, options) {
+  if (inFlightSyncs.has(appId)) {
+    return await inFlightSyncs.get(appId);
+  }
+  const syncPromise = _doSyncLatestRelease(appId, options);
+  inFlightSyncs.set(appId, syncPromise);
+  try {
+    return await syncPromise;
+  } finally {
+    inFlightSyncs.delete(appId);
+  }
+}
+
+async function _doSyncLatestRelease(appId, { githubRepo, githubApiUrl = "https://api.github.com", token = "", platform = "android", assetPattern = "" }) {
   if (!githubRepo) throw new Error("githubRepo 未配置");
   const cleanRepo = cleanGithubRepo(githubRepo);
   const defaultExt = getFileExt(platform);
@@ -302,8 +318,28 @@ export async function syncLatestRelease(appId, { githubRepo, githubApiUrl = "htt
   await mkdir(releaseDir, { recursive: true });
   await mkdir(patchDir, { recursive: true });
 
-  // Preserve previous latest version's binary before overwriting
+  const versionedFile = path.join(releaseDir, `release-v${versionCode}.${ext}`);
+  const legacyFile = path.join(releaseDir, `latest.${ext}`);
+
+  // If this exact version is already recorded as latest and its file exists intact, skip re-download
   const existingLatest = getLatestVersion(appId);
+  if (existingLatest && Number(existingLatest.version_code) === versionCode) {
+    try {
+      const s = await stat(versionedFile);
+      if (s.isFile() && s.size > 0) {
+        return {
+          versionCode,
+          versionName,
+          releaseUrl: release.html_url,
+          patchesGenerated: [],
+          alreadyLatest: true,
+          bsdiffAvailable: await checkBsdiffAvailable(),
+        };
+      }
+    } catch {}
+  }
+
+  // Preserve previous latest version's binary before overwriting
   if (existingLatest && Number(existingLatest.version_code) < versionCode) {
     const prevCode = Number(existingLatest.version_code);
     const versionedOld = await findReleaseFileOnDisk(releaseDir, prevCode, ext);
@@ -313,12 +349,15 @@ export async function syncLatestRelease(appId, { githubRepo, githubApiUrl = "htt
     }
   }
 
-  const tempFile = path.join(releaseDir, `.release-${versionCode}.tmp`);
-  const versionedFile = path.join(releaseDir, `release-v${versionCode}.${ext}`);
-  const legacyFile = path.join(releaseDir, `latest.${ext}`);
+  const randSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const tempFile = path.join(releaseDir, `.release-${versionCode}-${randSuffix}.tmp`);
 
   try {
     await downloadWithTimeout(fileAsset.browser_download_url, { headers }, tempFile, fileTimeoutMs);
+    const tempStat = await stat(tempFile);
+    if (!tempStat.isFile() || tempStat.size === 0) {
+      throw new Error("下载安装包失败: 临时文件为空或未完整写入");
+    }
     await rename(tempFile, versionedFile);
     await copyFile(versionedFile, legacyFile);
 
@@ -574,9 +613,14 @@ export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePa
         }
       }
 
-      const tempFile = path.join(releaseDir, `.release-${versionCode}.tmp`);
+      const randSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const tempFile = path.join(releaseDir, `.release-${versionCode}-${randSuffix}.tmp`);
       try {
         await downloadWithTimeout(fileAsset.browser_download_url, { headers }, tempFile, fileTimeoutMs);
+        const tempStat = await stat(tempFile);
+        if (!tempStat.isFile() || tempStat.size === 0) {
+          throw new Error("下载安装包失败: 临时文件为空或未完整写入");
+        }
         await rename(tempFile, versionedFile);
       } finally {
         await rm(tempFile, { force: true }).catch(() => {});

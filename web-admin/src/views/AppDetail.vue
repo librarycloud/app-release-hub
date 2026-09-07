@@ -161,7 +161,7 @@
               <div class="meta-row">
                 <span class="meta-label">完整包大小</span>
                 <span class="meta-val">
-                  <el-tag size="small" type="info">{{ formatSize(group.size) }}</el-tag>
+                  <span class="meta-size-badge">{{ formatSize(group.size) }}</span>
                 </span>
               </div>
               <div class="meta-row">
@@ -171,14 +171,16 @@
               <div class="meta-row">
                 <span class="meta-label">强制更新状态</span>
                 <span class="meta-val">
-                  <el-tag :type="group.forceUpdate ? 'danger' : 'info'" size="small">
-                    {{ group.forceUpdate ? '已开启（全员强制更新）' : '未开启（常规更新）' }}
-                  </el-tag>
+                  <span :class="['meta-status-badge', group.forceUpdate ? 'danger' : 'normal']">
+                    {{ group.forceUpdate ? '🚨 已开启（全员强制更新）' : '常规更新（未开启强制）' }}
+                  </span>
                 </span>
               </div>
               <div class="meta-row">
                 <span class="meta-label">最低兼容版本</span>
-                <span class="meta-val">vc &ge; {{ group.minVersionCode || 1 }}</span>
+                <span class="meta-val">
+                  <code class="meta-vc-code">vc &ge; {{ group.minVersionCode || 1 }}</code>
+                </span>
               </div>
               <div class="meta-row full-width">
                 <span class="meta-label">SHA-256</span>
@@ -1152,7 +1154,7 @@ onUnmounted(() => {
 
 .sub-card-hint {
   font-size: 12px;
-  color: var(--app-text-muted);
+  color: var(--app-text-sub);
 }
 
 /* Section 1: Version Controls Toolbar */
@@ -1192,7 +1194,7 @@ onUnmounted(() => {
   user-select: none;
 }
 
-/* Section 2: Full Info Metadata Grid (Clean, no nested table box) */
+/* Section 2: Full Info Metadata Grid (High Contrast & High Legibility) */
 .full-info {
   overflow: hidden;
 }
@@ -1201,13 +1203,13 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px 24px;
-  padding: 2px 0;
+  padding: 4px 0;
 }
 
 .meta-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-size: 13px;
   min-width: 0;
 }
@@ -1220,41 +1222,123 @@ onUnmounted(() => {
 .meta-label {
   width: 96px;
   flex-shrink: 0;
-  color: var(--app-text-muted);
-  font-weight: 500;
+  color: #334155;
+  font-weight: 600;
   font-size: 13px;
+  letter-spacing: 0.2px;
+}
+
+[data-theme="dark"] .meta-label {
+  color: #cbd5e1;
 }
 
 .meta-val {
   flex: 1;
   min-width: 0;
   color: var(--app-text-main);
+  font-weight: 500;
   word-break: break-all;
   overflow-wrap: anywhere;
+}
+
+.meta-size-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--app-card-bg);
+  border: 1px solid var(--app-card-border);
+  color: var(--app-text-main);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.meta-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.meta-status-badge.normal {
+  background: var(--app-card-bg);
+  border: 1px solid var(--app-card-border);
+  color: var(--app-text-main);
+}
+
+.meta-status-badge.danger {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #dc2626;
+  font-weight: 600;
+}
+
+[data-theme="dark"] .meta-status-badge.danger {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #f87171;
+}
+
+.meta-vc-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--app-text-main);
+  background: var(--app-card-bg);
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--app-card-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .sha {
-  font-size: 11px;
-  word-break: break-all;
-  overflow-wrap: anywhere;
-  font-family: monospace;
-  color: var(--app-text-muted);
-  background: var(--app-card-bg);
-  padding: 3px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--app-card-border);
-  display: inline-block;
-  line-height: 1.4;
-}
-
-.dl-link {
-  color: var(--app-accent);
   font-size: 12px;
   word-break: break-all;
   overflow-wrap: anywhere;
-  font-family: monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #1e293b;
+  font-weight: 500;
+  background: var(--app-card-bg);
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--app-card-border);
   display: inline-block;
-  line-height: 1.4;
+  line-height: 1.5;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="dark"] .sha {
+  color: #e2e8f0;
+}
+
+.dl-link {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 500;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  display: inline-block;
+  line-height: 1.5;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s ease;
+}
+
+.dl-link:hover {
+  color: #1d4ed8;
+}
+
+[data-theme="dark"] .dl-link {
+  color: #60a5fa;
+}
+
+[data-theme="dark"] .dl-link:hover {
+  color: #93c5fd;
 }
 
 /* Section 3: Notes Section */
@@ -1267,7 +1351,8 @@ onUnmounted(() => {
   padding: 0;
   font-size: 13px;
   line-height: 1.8;
-  color: var(--app-text-sub);
+  color: var(--app-text-main);
+  font-weight: 450;
   word-break: break-word;
   overflow-wrap: anywhere;
 }

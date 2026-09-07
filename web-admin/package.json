@@ -21,6 +21,7 @@
     "esbuild": "^0.25.0"
   },
   "allowScripts": {
-    "esbuild": true
+    "esbuild": true,
+    "fsevents": true
   }
 }

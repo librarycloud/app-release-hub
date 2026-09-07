@@ -1,10 +1,13 @@
 <template>
   <div class="page">
-    <!-- Breadcrumb -->
-    <el-breadcrumb separator="/" style="margin-bottom:16px">
-      <el-breadcrumb-item :to="{ path: '/' }">所有 App</el-breadcrumb-item>
-      <el-breadcrumb-item>{{ appId }}</el-breadcrumb-item>
-    </el-breadcrumb>
+    <!-- Top Breadcrumb Bar -->
+    <div class="breadcrumb-bar">
+      <el-breadcrumb separator="/">
+        <el-breadcrumb-item :to="{ path: '/' }">🏠 所有 App</el-breadcrumb-item>
+        <el-breadcrumb-item>{{ appInfo?.name || appId }}</el-breadcrumb-item>
+      </el-breadcrumb>
+      <ThemeToggle />
+    </div>
 
     <!-- Toolbar -->
     <div class="toolbar">
@@ -465,6 +468,7 @@
 import { ref, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage, ElNotification, ElMessageBox } from "element-plus";
+import ThemeToggle from "../components/ThemeToggle.vue";
 import {
   listApps,
   updateApp,
@@ -829,86 +833,193 @@ onMounted(load);
 </script>
 
 <style scoped>
-.page { padding: 24px; max-width: 1100px; margin: 0 auto; }
-.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.sub-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
-.repo-link { font-size: 13px; color: #409eff; }
-.sub { font-size: 13px; color: #67c23a; }
-.sub.warn { color: #e6a23c; }
-.group-title { display: flex; align-items: center; justify-content: space-between; width: 100%; padding-right: 12px; }
-.vc { color: #999; font-size: 12px; margin-left: 4px; }
-.group-stats { display: flex; align-items: center; gap: 6px; }
-.date { font-size: 12px; color: #aaa; }
+.page {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.breadcrumb-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding: 20px;
+  background: var(--app-card-bg);
+  border: 1px solid var(--app-card-border);
+  border-radius: 12px;
+  box-shadow: var(--app-card-shadow);
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.sub-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.repo-link {
+  font-size: 13px;
+  color: var(--app-accent);
+  font-family: monospace;
+}
+
+.sub {
+  font-size: 13px;
+  color: #10b981;
+}
+
+.sub.warn {
+  color: #f59e0b;
+}
+
+.group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding-right: 14px;
+}
+
+.vc {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  margin-left: 6px;
+  font-family: monospace;
+}
+
+.group-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.date {
+  font-size: 12px;
+  color: var(--app-text-muted);
+}
+
 .version-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
-  padding: 10px 14px;
-  background: #f8f9fb;
-  border-radius: 6px;
-  border: 1px solid #ebeef5;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: var(--app-surface-subtle);
+  border-radius: 8px;
+  border: 1px solid var(--app-card-border);
   flex-wrap: wrap;
   gap: 12px;
 }
+
 .version-controls {
   display: flex;
   align-items: center;
   gap: 20px;
   flex-wrap: wrap;
 }
+
 .ctrl-item {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
 }
+
 .ctrl-label {
   font-weight: 500;
-  color: #555;
+  color: var(--app-text-sub);
 }
+
 .help-icon {
   cursor: pointer;
-  color: #909399;
+  color: var(--app-text-muted);
   font-size: 14px;
   user-select: none;
 }
-.full-info { margin-bottom: 14px; }
-.sha { font-size: 11px; word-break: break-all; }
-.dl-link { color: #409eff; font-size: 12px; word-break: break-all; }
-.notes-section {
-  margin-bottom: 14px;
-  padding: 10px 14px;
-  background: #f8f9fb;
-  border-radius: 6px;
-  border: 1px solid #ebeef5;
+
+.full-info {
+  margin-bottom: 16px;
 }
+
+.sha {
+  font-size: 11px;
+  word-break: break-all;
+  font-family: monospace;
+  color: var(--app-text-muted);
+}
+
+.dl-link {
+  color: var(--app-accent);
+  font-size: 12px;
+  word-break: break-all;
+  font-family: monospace;
+}
+
+.notes-section {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: var(--app-surface-subtle);
+  border-radius: 8px;
+  border: 1px solid var(--app-card-border);
+}
+
 .notes-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
+
 .notes-title {
   font-weight: 600;
   font-size: 13px;
-  color: #333;
+  color: var(--app-text-main);
 }
+
 .notes-list {
-  margin: 4px 0 0 16px;
+  margin: 6px 0 0 16px;
   padding: 0;
   font-size: 13px;
-  line-height: 1.7;
-  color: #444;
+  line-height: 1.8;
+  color: var(--app-text-sub);
 }
+
 .empty-notes {
   font-size: 12px;
-  color: #999;
+  color: var(--app-text-muted);
   padding: 4px 0;
 }
-.patch-section { margin-top: 12px; }
-.patch-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.missing-list { margin-top: 8px; font-size: 12px; }
-.missing-label { color: #999; margin-right: 4px; }
+
+.patch-section {
+  margin-top: 16px;
+}
+
+.patch-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.missing-list {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.missing-label {
+  color: var(--app-text-muted);
+  margin-right: 6px;
+}
 </style>
 

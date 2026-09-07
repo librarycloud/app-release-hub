@@ -1,0 +1,109 @@
+/* Modern Design System & Dark Theme Tokens */
+
+:root {
+  --app-bg: #f8fafc;
+  --app-bg-gradient: radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.05) 0px, transparent 50%),
+                     radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.05) 0px, transparent 50%),
+                     #f8fafc;
+  --app-header-bg: rgba(255, 255, 255, 0.85);
+  --app-header-border: rgba(226, 232, 240, 0.8);
+  --app-card-bg: rgba(255, 255, 255, 0.95);
+  --app-card-border: #e2e8f0;
+  --app-card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04), 0 2px 6px -1px rgba(0, 0, 0, 0.02);
+  --app-card-shadow-hover: 0 14px 28px -4px rgba(0, 0, 0, 0.09), 0 6px 12px -2px rgba(0, 0, 0, 0.04);
+  --app-text-main: #0f172a;
+  --app-text-sub: #475569;
+  --app-text-muted: #94a3b8;
+  --app-accent: #3b82f6;
+  --app-surface-subtle: #f1f5f9;
+  --app-code-bg: #f1f5f9;
+  --app-stat-bg: rgba(255, 255, 255, 0.9);
+  color-scheme: light;
+}
+
+html.dark {
+  --app-bg: #090d16;
+  --app-bg-gradient: radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
+                     radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.1) 0px, transparent 50%),
+                     #090d16;
+  --app-header-bg: rgba(15, 23, 42, 0.85);
+  --app-header-border: rgba(255, 255, 255, 0.08);
+  --app-card-bg: rgba(26, 34, 52, 0.85);
+  --app-card-border: rgba(255, 255, 255, 0.08);
+  --app-card-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.45);
+  --app-card-shadow-hover: 0 14px 32px -4px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(96, 165, 250, 0.25);
+  --app-text-main: #f8fafc;
+  --app-text-sub: #94a3b8;
+  --app-text-muted: #64748b;
+  --app-accent: #60a5fa;
+  --app-surface-subtle: rgba(255, 255, 255, 0.04);
+  --app-code-bg: rgba(0, 0, 0, 0.28);
+  --app-stat-bg: rgba(26, 34, 52, 0.85);
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--app-bg-gradient);
+  color: var(--app-text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  min-height: 100vh;
+  transition: background 0.3s ease, color 0.3s ease;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Glassmorphism Classes */
+.glass-header {
+  background: var(--app-header-bg) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--app-header-border);
+}
+
+.modern-card {
+  background: var(--app-card-bg) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--app-card-border) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--app-card-shadow) !important;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease !important;
+}
+
+.modern-card:hover {
+  box-shadow: var(--app-card-shadow-hover) !important;
+}
+
+/* Badge Glow Effect */
+.latest-badge {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  color: #fff !important;
+  border: none !important;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+}
+
+.force-badge {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  color: #fff !important;
+  border: none !important;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
+}

@@ -10,25 +10,70 @@ export function getApp(appId) {
   return db.prepare("SELECT * FROM apps WHERE app_id = ?").get(appId) || null;
 }
 
-export function insertApp({ appId, name, platform = "android", githubRepo = "", githubApiUrl = "https://api.github.com", autoSync = false, assetPattern = "" }) {
+export function insertApp({
+  appId,
+  name,
+  platform = "android",
+  githubRepo = "",
+  githubApiUrl = "https://api.github.com",
+  autoSync = false,
+  autoSyncIntervalMinutes = 60,
+  assetPattern = "",
+}) {
   db.prepare(`
-    INSERT INTO apps (app_id, name, platform, github_repo, github_api_url, auto_sync, asset_pattern)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(appId, name, platform, githubRepo, githubApiUrl, autoSync ? 1 : 0, assetPattern || "");
+    INSERT INTO apps (app_id, name, platform, github_repo, github_api_url, auto_sync, auto_sync_interval_minutes, asset_pattern)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    appId,
+    name,
+    platform,
+    githubRepo,
+    githubApiUrl,
+    autoSync ? 1 : 0,
+    Math.max(Number(autoSyncIntervalMinutes) || 60, 5),
+    assetPattern || ""
+  );
 }
 
 export function getAutoSyncApps() {
   return db.prepare("SELECT * FROM apps WHERE auto_sync = 1 AND github_repo != ''").all();
 }
 
+export function getDueAutoSyncApps() {
+  return db.prepare(`
+    SELECT * FROM apps 
+    WHERE auto_sync = 1 AND github_repo != ''
+      AND (
+        last_synced_at IS NULL
+        OR (strftime('%s', 'now') - strftime('%s', last_synced_at)) >= (COALESCE(auto_sync_interval_minutes, 60) * 60)
+      )
+  `).all();
+}
+
 export function updateApp(appId, fields) {
-  const allowed = ["name", "platform", "github_repo", "github_api_url", "auto_sync", "asset_pattern", "last_synced_at", "last_sync_error"];
+  const allowed = [
+    "name",
+    "platform",
+    "github_repo",
+    "github_api_url",
+    "auto_sync",
+    "auto_sync_interval_minutes",
+    "asset_pattern",
+    "last_synced_at",
+    "last_sync_error",
+  ];
   const updates = [];
   const values = [];
   for (const [k, v] of Object.entries(fields)) {
     if (allowed.includes(k)) {
       updates.push(`${k} = ?`);
-      values.push(k === "auto_sync" ? (v ? 1 : 0) : v);
+      if (k === "auto_sync") {
+        values.push(v ? 1 : 0);
+      } else if (k === "auto_sync_interval_minutes") {
+        values.push(Math.max(Number(v) || 60, 5));
+      } else {
+        values.push(v);
+      }
     }
   }
   if (updates.length === 0) return;

@@ -95,8 +95,8 @@ export async function listAppsController(_request, reply) {
 }
 
 export async function createAppController(request, reply) {
-  const { appId, name, platform, githubRepo, githubApiUrl, autoSync, assetPattern } = request.body || {};
-  const app = registerApp({ appId, name, platform, githubRepo, githubApiUrl, autoSync, assetPattern });
+  const { appId, name, platform, githubRepo, githubApiUrl, autoSync, autoSyncIntervalMinutes, assetPattern } = request.body || {};
+  const app = registerApp({ appId, name, platform, githubRepo, githubApiUrl, autoSync, autoSyncIntervalMinutes, assetPattern });
   return reply.code(201).send({ code: 0, message: "App 注册成功", data: app });
 }
 
@@ -170,7 +170,7 @@ export async function generateAllPatchesController(request, reply) {
 
 export async function syncAllAppsController(_request, reply) {
   const { runAutoSyncCycle } = await import("../services/autoSyncService.js");
-  const result = await runAutoSyncCycle();
+  const result = await runAutoSyncCycle({ forceAll: true });
   return ok(reply, result, "全部自动同步任务已触发");
 }
 

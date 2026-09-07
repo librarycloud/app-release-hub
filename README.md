@@ -719,19 +719,21 @@ curl -X DELETE "https://hub.example.com/admin/apps/android-main/versions/161" \
 
 ## 🚢 五、服务端部署与运维
 
-### 1. 使用 Docker Compose 部署（推荐）
+### 1. 部署方式
 
-```bash
-git clone https://github.com/your-org/app-release-hub.git
-cd app-release-hub
+- **方式 A：Docker Compose 一键容器化部署（推荐）**
+  ```bash
+  git clone https://github.com/your-org/app-release-hub.git
+  cd app-release-hub
+  cp backend/.env.example backend/.env
+  vim backend/.env
+  docker-compose up -d
+  ```
 
-# 拷贝并编辑环境变量
-cp backend/.env.example backend/.env
-vim backend/.env
+- **方式 B：Debian 13 原生直接部署（Node.js 24 LTS + Nginx 最新版 + acme.sh）**
+  适用于不使用 Docker 的裸机生产环境，详见专门的部署文档：
+  👉 **[Debian 13 原生部署完整教程（Node 24 + Nginx 最新版 + acme.sh SSL）](docs/deploy-debian13.md)**
 
-# 启动后端服务 (3000) 与 Web 管理前端 (8080)
-docker-compose up -d
-```
 
 ### 2. 环境变量一览 (`backend/.env`)
 

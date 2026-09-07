@@ -23,6 +23,19 @@ await fastify.register(multipart, {
   },
 });
 
+// Allow empty body when Content-Type: application/json is sent
+fastify.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
+  if (!body || body.trim() === "") {
+    return done(null, {});
+  }
+  try {
+    done(null, JSON.parse(body));
+  } catch (err) {
+    err.statusCode = 400;
+    done(err, undefined);
+  }
+});
+
 // CORS
 await fastify.register(cors, { origin: true });
 

@@ -257,3 +257,56 @@
     "targetVersionCode": 162
   }
   ```
+
+---
+
+### 5. 请求与下载次数统计
+
+#### 全局统计概览
+- `GET /admin/stats/overview`
+- 响应示例：
+  ```json
+  {
+    "code": 0,
+    "message": "ok",
+    "data": {
+      "totalApps": 3,
+      "autoSyncApps": 2,
+      "totalChecks": 1284,
+      "totalDownloads": 432,
+      "todayChecks": 86,
+      "todayDownloads": 28,
+      "todayFullDownloads": 12,
+      "todayPatchDownloads": 16
+    }
+  }
+  ```
+
+#### 单 App 统计与近 7 天趋势
+- `GET /admin/apps/:appId/stats`
+- 响应示例：
+  ```json
+  {
+    "code": 0,
+    "message": "ok",
+    "data": {
+      "appId": "android-main",
+      "totalChecks": 950,
+      "totalDownloads": 320,
+      "todayChecks": 64,
+      "todayDownloads": 21,
+      "totalFullDownloads": 110,
+      "totalPatchDownloads": 210,
+      "recentDays": [
+        {
+          "date": "2026-09-01",
+          "check_count": 80,
+          "full_download_count": 10,
+          "patch_download_count": 22,
+          "total_downloads": 32
+        }
+      ]
+    }
+  }
+  ```
+

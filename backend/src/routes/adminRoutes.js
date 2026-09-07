@@ -13,11 +13,17 @@ import {
   deleteVersionController,
   syncHistoryReleasesController,
   createVersionController,
+  getGlobalStatsController,
+  getAppStatsController,
 } from "../controllers/appController.js";
 
 const auth = { preHandler: [apiKeyAuth] };
 
 export default async function adminRoutes(fastify) {
+  // Statistics
+  fastify.get("/admin/stats/overview", auth, getGlobalStatsController);
+  fastify.get("/admin/apps/:appId/stats", auth, getAppStatsController);
+
   // App registry
   fastify.get("/admin/apps", auth, listAppsController);
   fastify.post("/admin/apps", auth, createAppController);

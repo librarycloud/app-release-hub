@@ -42,6 +42,7 @@ function parseVersion(row) {
     fileUrl: row.file_url,
     sha256: row.sha256,
     size: Number(row.size),
+    downloadCount: Number(row.download_count || 0),
     isLatest: row.is_latest === 1,
   };
 }
@@ -229,6 +230,7 @@ export async function getPatchMatrix(appId) {
           patchSize,
           savedBytes,
           savedPercentage: ver.size > 0 ? Number(((savedBytes / ver.size) * 100).toFixed(1)) : 0,
+          downloadCount: Number(p.download_count || 0),
           createdAt: p.created_at
             ? (String(p.created_at).includes("T")
                 ? (String(p.created_at).endsWith("Z") ? p.created_at : `${p.created_at}Z`)
@@ -251,6 +253,7 @@ export async function getPatchMatrix(appId) {
       forceUpdate: ver.forceUpdate,
       isLatest: ver.isLatest,
       size: ver.size,
+      downloadCount: ver.downloadCount,
       downloadUrl: resolveUrl(ver.fileUrl),
       sha256: ver.sha256,
       publishedAt: ver.publishedAt,

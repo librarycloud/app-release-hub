@@ -45,6 +45,10 @@ export const getPatchMatrix = (appId) => http.get(`/admin/apps/${appId}/patches`
 export const generatePatch = (appId, data) => http.post(`/admin/apps/${appId}/patches/generate`, data);
 export const generateAllPatches = (appId, data) => http.post(`/admin/apps/${appId}/patches/generate-all`, data);
 
+// ─── Stats ───────────────────────────────────────────────────────────────────
+export const getGlobalStats = () => http.get("/admin/stats/overview");
+export const getAppStats = (appId) => http.get(`/admin/apps/${appId}/stats`);
+
 // ─── Auth helper ─────────────────────────────────────────────────────────────
 export function setApiKey(key) { localStorage.setItem("admin_api_key", key); }
 export function getApiKey() { return localStorage.getItem("admin_api_key") || ""; }

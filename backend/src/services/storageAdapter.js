@@ -124,6 +124,7 @@ export function formatVersion(row) {
     fileUrl: row.file_url,
     sha256: row.sha256,
     size: row.size,
+    downloadCount: Number(row.download_count || 0),
     isLatest: Boolean(row.is_latest),
   };
 }
@@ -274,3 +275,142 @@ export function deletePatch(appId, fromVersionCode, targetVersionCode) {
   db.prepare("DELETE FROM patches WHERE app_id = ? AND from_version_code = ? AND target_version_code = ?")
     .run(appId, Number(fromVersionCode), Number(targetVersionCode));
 }
+
+// ─── Stats Tracking ──────────────────────────────────────────────────────────
+
+export function recordAppCheck(appId) {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    db.prepare("UPDATE apps SET check_count = check_count + 1 WHERE app_id = ?").run(appId);
+    db.prepare(`
+      INSERT INTO app_daily_stats (app_id, date, check_count)
+      VALUES (?, ?, 1)
+      ON CONFLICT(app_id, date) DO UPDATE SET check_count = check_count + 1
+    `).run(appId, today);
+  } catch (err) {
+    console.warn(`[storageAdapter] recordAppCheck error for ${appId}:`, err.message);
+  }
+}
+
+export function recordReleaseDownload(appId, filename) {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    db.prepare("UPDATE apps SET download_count = download_count + 1 WHERE app_id = ?").run(appId);
+    db.prepare(`
+      INSERT INTO app_daily_stats (app_id, date, full_download_count)
+      VALUES (?, ?, 1)
+      ON CONFLICT(app_id, date) DO UPDATE SET full_download_count = full_download_count + 1
+    `).run(appId, today);
+
+    let vCode = null;
+    const match = String(filename).match(/^release-v(\d+)\./i);
+    if (match) {
+      vCode = Number(match[1]);
+    } else if (/^latest\./i.test(filename)) {
+      const latest = getLatestVersion(appId);
+      if (latest) vCode = Number(latest.version_code);
+    }
+
+    if (vCode) {
+      db.prepare("UPDATE versions SET download_count = download_count + 1 WHERE app_id = ? AND version_code = ?").run(appId, vCode);
+    }
+  } catch (err) {
+    console.warn(`[storageAdapter] recordReleaseDownload error for ${appId}/${filename}:`, err.message);
+  }
+}
+
+export function recordPatchDownload(appId, filename) {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    db.prepare("UPDATE apps SET download_count = download_count + 1 WHERE app_id = ?").run(appId);
+    db.prepare(`
+      INSERT INTO app_daily_stats (app_id, date, patch_download_count)
+      VALUES (?, ?, 1)
+      ON CONFLICT(app_id, date) DO UPDATE SET patch_download_count = patch_download_count + 1
+    `).run(appId, today);
+
+    const match = String(filename).match(/^patch-v(\d+)-to-v(\d+)\.patch$/i);
+    if (match) {
+      const fromCode = Number(match[1]);
+      const targetCode = Number(match[2]);
+      db.prepare(`
+        UPDATE patches 
+        SET download_count = download_count + 1 
+        WHERE app_id = ? AND from_version_code = ? AND target_version_code = ?
+      `).run(appId, fromCode, targetCode);
+    }
+  } catch (err) {
+    console.warn(`[storageAdapter] recordPatchDownload error for ${appId}/${filename}:`, err.message);
+  }
+}
+
+export function getAppStats(appId) {
+  const app = getApp(appId);
+  if (!app) return null;
+  const today = new Date().toISOString().slice(0, 10);
+
+  const todayRow = db.prepare(`
+    SELECT * FROM app_daily_stats WHERE app_id = ? AND date = ?
+  `).get(appId, today) || { check_count: 0, full_download_count: 0, patch_download_count: 0 };
+
+  const totals = db.prepare(`
+    SELECT 
+      SUM(full_download_count) as total_full_downloads,
+      SUM(patch_download_count) as total_patch_downloads
+    FROM app_daily_stats WHERE app_id = ?
+  `).get(appId);
+
+  const recentDays = db.prepare(`
+    SELECT date, check_count, full_download_count, patch_download_count,
+      (full_download_count + patch_download_count) as total_downloads
+    FROM app_daily_stats 
+    WHERE app_id = ? AND date >= date('now', '-6 days')
+    ORDER BY date ASC
+  `).all(appId);
+
+  return {
+    appId,
+    totalChecks: Number(app.check_count || 0),
+    totalDownloads: Number(app.download_count || 0),
+    todayChecks: Number(todayRow.check_count || 0),
+    todayDownloads: Number((todayRow.full_download_count || 0) + (todayRow.patch_download_count || 0)),
+    totalFullDownloads: Number(totals?.total_full_downloads || 0),
+    totalPatchDownloads: Number(totals?.total_patch_downloads || 0),
+    recentDays,
+  };
+}
+
+export function getGlobalStats() {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const appAgg = db.prepare(`
+    SELECT 
+      COUNT(*) as total_apps,
+      SUM(CASE WHEN auto_sync = 1 THEN 1 ELSE 0 END) as auto_sync_apps,
+      SUM(check_count) as total_checks,
+      SUM(download_count) as total_downloads
+    FROM apps
+  `).get();
+
+  const todayAgg = db.prepare(`
+    SELECT 
+      SUM(check_count) as today_checks,
+      SUM(full_download_count + patch_download_count) as today_downloads,
+      SUM(full_download_count) as today_full_downloads,
+      SUM(patch_download_count) as today_patch_downloads
+    FROM app_daily_stats
+    WHERE date = ?
+  `).get(today);
+
+  return {
+    totalApps: Number(appAgg?.total_apps || 0),
+    autoSyncApps: Number(appAgg?.auto_sync_apps || 0),
+    totalChecks: Number(appAgg?.total_checks || 0),
+    totalDownloads: Number(appAgg?.total_downloads || 0),
+    todayChecks: Number(todayAgg?.today_checks || 0),
+    todayDownloads: Number(todayAgg?.today_downloads || 0),
+    todayFullDownloads: Number(todayAgg?.today_full_downloads || 0),
+    todayPatchDownloads: Number(todayAgg?.today_patch_downloads || 0),
+  };
+}
+

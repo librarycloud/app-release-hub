@@ -3,7 +3,15 @@ import { stat, mkdir, rm } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
 import { config } from "../config.js";
-import { getApp, recordSyncResult } from "../services/storageAdapter.js";
+import {
+  getApp,
+  recordSyncResult,
+  recordAppCheck,
+  recordReleaseDownload,
+  recordPatchDownload,
+  getAppStats,
+  getGlobalStats,
+} from "../services/storageAdapter.js";
 import {
   getAllApps,
   getAppById,
@@ -44,6 +52,11 @@ export async function clientVersionController(request, reply) {
   const { appId } = request.params;
   const app = await requireApp(appId, reply);
   if (!app) return;
+  try {
+    recordAppCheck(appId);
+  } catch {
+    // Non-blocking
+  }
   reply.header("Cache-Control", "no-store, no-cache, must-revalidate").header("Pragma", "no-cache");
   const currentVersionCode = request.query.versionCode || request.query.currentVersionCode;
   return ok(reply, await getVersionForClient(appId, { currentVersionCode }));
@@ -61,6 +74,11 @@ export async function serveReleaseController(request, reply) {
     if (!s.isFile()) return reply.code(404).send({ code: 404, message: "文件不存在" });
   } catch {
     return reply.code(404).send({ code: 404, message: "文件不存在" });
+  }
+  try {
+    recordReleaseDownload(appId, filename);
+  } catch {
+    // Non-blocking
   }
   reply
     .header("Cache-Control", "no-store, no-cache, must-revalidate")
@@ -80,6 +98,11 @@ export async function servePatchController(request, reply) {
     if (!s.isFile()) return reply.code(404).send({ code: 404, message: "补丁文件不存在" });
   } catch {
     return reply.code(404).send({ code: 404, message: "补丁文件不存在" });
+  }
+  try {
+    recordPatchDownload(appId, filename);
+  } catch {
+    // Non-blocking
   }
   reply
     .type("application/octet-stream")
@@ -263,4 +286,16 @@ export async function createVersionController(request, reply) {
     return reply.code(201).send({ code: 0, message: "版本创建成功", data: result });
   }
 }
+
+export async function getGlobalStatsController(_request, reply) {
+  return ok(reply, getGlobalStats());
+}
+
+export async function getAppStatsController(request, reply) {
+  const { appId } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+  return ok(reply, getAppStats(appId));
+}
+
 

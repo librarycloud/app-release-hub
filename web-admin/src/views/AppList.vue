@@ -38,21 +38,30 @@
         <div class="stat-card modern-card">
           <div class="stat-icon-wrap green">🔄</div>
           <div class="stat-info">
-            <div class="stat-label">开启定时自动同步</div>
+            <div class="stat-label">开启自动同步</div>
             <div class="stat-value">{{ autoSyncCount }} <span class="stat-unit">个</span></div>
           </div>
         </div>
         <div class="stat-card modern-card">
-          <div class="stat-icon-wrap purple">🌐</div>
+          <div class="stat-icon-wrap purple">📡</div>
           <div class="stat-info">
-            <div class="stat-label">覆盖平台数</div>
-            <div class="stat-value">{{ platformCount }} <span class="stat-unit">种</span></div>
+            <div class="stat-label">检查更新请求</div>
+            <div class="stat-value">{{ globalStats.totalChecks || 0 }} <span class="stat-unit">次</span></div>
+            <div class="stat-sub-text">今日 {{ globalStats.todayChecks || 0 }} 次</div>
           </div>
         </div>
         <div class="stat-card modern-card">
-          <div class="stat-icon-wrap amber">⚡</div>
+          <div class="stat-icon-wrap amber">📥</div>
           <div class="stat-info">
-            <div class="stat-label">bsdiff 增量差分</div>
+            <div class="stat-label">累计下载安装</div>
+            <div class="stat-value">{{ globalStats.totalDownloads || 0 }} <span class="stat-unit">次</span></div>
+            <div class="stat-sub-text">今日 {{ globalStats.todayDownloads || 0 }} 次</div>
+          </div>
+        </div>
+        <div class="stat-card modern-card">
+          <div class="stat-icon-wrap cyan">⚡</div>
+          <div class="stat-info">
+            <div class="stat-label">bsdiff 差分引擎</div>
             <div class="stat-value text-success">已启用</div>
           </div>
         </div>
@@ -138,6 +147,17 @@
               </div>
               <div v-if="app.lastSyncError" class="sync-error-banner" :title="app.lastSyncError">
                 ⚠️ {{ app.lastSyncError }}
+              </div>
+            </div>
+
+            <div class="app-card-stats">
+              <div class="app-card-stat-item" title="客户端检查更新请求次数">
+                <span class="stat-icon">📡</span>
+                <span class="stat-text">请求 <strong>{{ app.checkCount || 0 }}</strong></span>
+              </div>
+              <div class="app-card-stat-item" title="安装包/补丁累计下载次数">
+                <span class="stat-icon">📥</span>
+                <span class="stat-text">下载 <strong>{{ app.downloadCount || 0 }}</strong></span>
               </div>
             </div>
 
@@ -243,7 +263,7 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { Refresh, Plus } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
-import { listApps, createApp, deleteApp, syncAllApps, clearApiKey } from "../api/appHub.js";
+import { listApps, createApp, deleteApp, syncAllApps, clearApiKey, getGlobalStats } from "../api/appHub.js";
 import ThemeToggle from "../components/ThemeToggle.vue";
 import {
   getBrowserTimeZone,
@@ -260,6 +280,14 @@ function handleResize() {
 }
 
 const apps = ref([]);
+const globalStats = ref({
+  totalApps: 0,
+  autoSyncApps: 0,
+  totalChecks: 0,
+  totalDownloads: 0,
+  todayChecks: 0,
+  todayDownloads: 0,
+});
 const loading = ref(false);
 const syncingAll = ref(false);
 const showCreate = ref(false);
@@ -355,8 +383,14 @@ async function doSyncAll() {
 async function load() {
   loading.value = true;
   try {
-    const res = await listApps();
-    apps.value = res.data || [];
+    const [appsRes, statsRes] = await Promise.all([
+      listApps(),
+      getGlobalStats().catch(() => ({ data: {} })),
+    ]);
+    apps.value = appsRes.data || [];
+    if (statsRes?.data) {
+      globalStats.value = statsRes.data;
+    }
   } catch {
     ElMessage.error("加载 App 列表失败");
   } finally {
@@ -524,6 +558,7 @@ onUnmounted(() => {
 .stat-icon-wrap.green { background: rgba(16, 185, 129, 0.12); }
 .stat-icon-wrap.purple { background: rgba(139, 92, 246, 0.12); }
 .stat-icon-wrap.amber { background: rgba(245, 158, 11, 0.12); }
+.stat-icon-wrap.cyan { background: rgba(6, 182, 212, 0.12); }
 
 .stat-label {
   font-size: 12px;
@@ -541,6 +576,12 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 400;
   color: var(--app-text-muted);
+}
+
+.stat-sub-text {
+  font-size: 11px;
+  color: var(--app-text-muted);
+  margin-top: 3px;
 }
 
 .text-success {
@@ -726,6 +767,30 @@ html.dark .pill-count {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.app-card-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  margin-bottom: 12px;
+  background: var(--app-surface-subtle);
+  border-radius: 8px;
+  border: 1px solid var(--app-card-border);
+}
+
+.app-card-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--app-text-muted);
+}
+
+.app-card-stat-item strong {
+  color: var(--app-text-main);
+  font-weight: 600;
 }
 
 .app-card-actions {

@@ -81,6 +81,8 @@ function formatApp(row) {
     autoSync: row.auto_sync === 1,
     autoSyncIntervalMinutes: Number(row.auto_sync_interval_minutes || 60),
     assetPattern: row.asset_pattern || "",
+    checkCount: Number(row.check_count || 0),
+    downloadCount: Number(row.download_count || 0),
     lastSyncedAt: row.last_synced_at || null,
     lastSyncError: row.last_sync_error || null,
     createdAt: row.created_at,

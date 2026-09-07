@@ -65,6 +65,71 @@
       </div>
     </div>
 
+    <!-- App Stats Overview Cards & 7-day trend -->
+    <div class="app-stats-overview modern-card" v-if="appStats">
+      <div class="stats-overview-grid">
+        <div class="stat-mini-card">
+          <div class="stat-mini-icon purple">📡</div>
+          <div class="stat-mini-body">
+            <div class="stat-mini-label">检查更新请求</div>
+            <div class="stat-mini-val">{{ appStats.totalChecks || 0 }} <span class="stat-mini-unit">次</span></div>
+            <div class="stat-mini-sub">今日 {{ appStats.todayChecks || 0 }} 次</div>
+          </div>
+        </div>
+        <div class="stat-mini-card">
+          <div class="stat-mini-icon amber">📥</div>
+          <div class="stat-mini-body">
+            <div class="stat-mini-label">累计下载总数</div>
+            <div class="stat-mini-val">{{ appStats.totalDownloads || 0 }} <span class="stat-mini-unit">次</span></div>
+            <div class="stat-mini-sub">今日 {{ appStats.todayDownloads || 0 }} 次</div>
+          </div>
+        </div>
+        <div class="stat-mini-card">
+          <div class="stat-mini-icon blue">📦</div>
+          <div class="stat-mini-body">
+            <div class="stat-mini-label">全量安装包下载</div>
+            <div class="stat-mini-val">{{ appStats.totalFullDownloads || 0 }} <span class="stat-mini-unit">次</span></div>
+            <div class="stat-mini-sub">完整安装包请求</div>
+          </div>
+        </div>
+        <div class="stat-mini-card">
+          <div class="stat-mini-icon green">⚡</div>
+          <div class="stat-mini-body">
+            <div class="stat-mini-label">差分补丁下载</div>
+            <div class="stat-mini-val">{{ appStats.totalPatchDownloads || 0 }} <span class="stat-mini-unit">次</span></div>
+            <div class="stat-mini-sub">增量补丁下载</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7-day activity trend -->
+      <div class="stats-trend-section" v-if="appStats.recentDays && appStats.recentDays.length > 0">
+        <div class="trend-header">
+          <span class="trend-title">📊 近 7 天活动趋势</span>
+          <div class="trend-legend">
+            <span class="legend-item"><span class="legend-dot checks"></span>检查请求</span>
+            <span class="legend-item"><span class="legend-dot downloads"></span>下载更新</span>
+          </div>
+        </div>
+        <div class="trend-bars-container">
+          <div v-for="d in appStats.recentDays" :key="d.date" class="trend-day-col">
+            <div
+              class="trend-bars-pair"
+              :title="`${d.date}\n检查请求: ${d.check_count} 次\n下载次数: ${d.total_downloads} 次 (全量: ${d.full_download_count}, 差分: ${d.patch_download_count})`"
+            >
+              <div class="trend-bar-track">
+                <div class="trend-bar-fill checks" :style="{ height: getBarHeight(d.check_count, maxTrendChecks) + '%' }"></div>
+              </div>
+              <div class="trend-bar-track">
+                <div class="trend-bar-fill downloads" :style="{ height: getBarHeight(d.total_downloads, maxTrendDownloads) + '%' }"></div>
+              </div>
+            </div>
+            <div class="trend-date">{{ formatDayMonth(d.date) }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div v-loading="loading">
       <el-empty v-if="versionGroups.length === 0" description="暂无版本记录">
         <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:12px">
@@ -91,6 +156,7 @@
               </div>
               <div class="group-stats">
                 <el-tag type="info" size="small">{{ formatSize(group.size) }}</el-tag>
+                <el-tag type="primary" size="small">📥 {{ group.downloadCount || 0 }} 次下载</el-tag>
                 <el-tag
                   :type="group.coveredCount === group.eligibleCount ? 'success' : 'warning'"
                   size="small"
@@ -182,6 +248,12 @@
                   <code class="meta-vc-code">vc &ge; {{ group.minVersionCode || 1 }}</code>
                 </span>
               </div>
+              <div class="meta-row">
+                <span class="meta-label">全量包下载次数</span>
+                <span class="meta-val">
+                  <strong>{{ group.downloadCount || 0 }}</strong> 次
+                </span>
+              </div>
               <div class="meta-row full-width">
                 <span class="meta-label">SHA-256</span>
                 <span class="meta-val">
@@ -242,6 +314,11 @@
                 <el-table-column label="节省下载" min-width="140">
                   <template #default="{ row }">
                     <el-tag type="success" size="small">省 {{ formatSize(row.savedBytes) }} ({{ row.savedPercentage }}%)</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="下载次数" width="105" align="center">
+                  <template #default="{ row }">
+                    <el-tag type="info" size="small">📥 {{ row.downloadCount || 0 }}</el-tag>
                   </template>
                 </el-table-column>
                 <el-table-column label="生成时间" width="180">
@@ -575,6 +652,7 @@ import {
   generatePatch,
   updateVersion,
   deleteVersion,
+  getAppStats,
 } from "../api/appHub.js";
 
 const route = useRoute();
@@ -590,6 +668,31 @@ function handleResize() {
 const descriptionsColumn = computed(() => (isMobile.value ? 1 : 2));
 
 const appInfo = ref(null);
+const appStats = ref(null);
+
+const maxTrendChecks = computed(() => {
+  if (!appStats.value?.recentDays?.length) return 10;
+  const max = Math.max(...appStats.value.recentDays.map((d) => d.check_count || 0));
+  return max > 0 ? max : 10;
+});
+
+const maxTrendDownloads = computed(() => {
+  if (!appStats.value?.recentDays?.length) return 10;
+  const max = Math.max(...appStats.value.recentDays.map((d) => d.total_downloads || 0));
+  return max > 0 ? max : 10;
+});
+
+function getBarHeight(val, max) {
+  if (!val || !max) return 4;
+  return Math.max(8, Math.min(100, Math.round((val / max) * 100)));
+}
+
+function formatDayMonth(dateStr) {
+  if (!dateStr) return "";
+  const parts = dateStr.split("-");
+  if (parts.length >= 3) return `${parts[1]}/${parts[2]}`;
+  return dateStr;
+}
 const loading = ref(false);
 const syncing = ref(false);
 const versionGroups = ref([]);
@@ -711,13 +814,15 @@ function formatTime(iso) {
 async function load() {
   loading.value = true;
   try {
-    const [matrixRes, appsRes] = await Promise.all([
+    const [matrixRes, appsRes, statsRes] = await Promise.all([
       getPatchMatrix(appId),
       listApps(),
+      getAppStats(appId).catch(() => ({ data: null })),
     ]);
     versionGroups.value = matrixRes.data?.versionGroups || [];
     bsdiffAvailable.value = matrixRes.data?.bsdiffAvailable ?? true;
     appInfo.value = (appsRes.data || []).find((a) => a.appId === appId) || null;
+    appStats.value = statsRes?.data || null;
 
     // Auto-open the latest version group
     if (versionGroups.value.length > 0 && openGroups.value.length === 0) {
@@ -1038,6 +1143,184 @@ onUnmounted(() => {
 
 .sub.warn {
   color: #f59e0b;
+}
+
+/* App Stats Overview Banner */
+.app-stats-overview {
+  background: var(--app-card-bg);
+  border: 1px solid var(--app-card-border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  box-shadow: var(--app-card-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stats-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+}
+
+.stat-mini-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--app-surface-subtle);
+  border: 1px solid var(--app-card-border);
+  border-radius: 10px;
+}
+
+.stat-mini-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.stat-mini-icon.purple { background: rgba(139, 92, 246, 0.12); }
+.stat-mini-icon.amber  { background: rgba(245, 158, 11, 0.12); }
+.stat-mini-icon.blue   { background: rgba(59, 130, 246, 0.12); }
+.stat-mini-icon.green  { background: rgba(16, 185, 129, 0.12); }
+
+.stat-mini-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.stat-mini-label {
+  font-size: 11px;
+  color: var(--app-text-muted);
+  margin-bottom: 2px;
+}
+
+.stat-mini-val {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--app-text-main);
+  line-height: 1.2;
+}
+
+.stat-mini-unit {
+  font-size: 11px;
+  font-weight: normal;
+  color: var(--app-text-muted);
+}
+
+.stat-mini-sub {
+  font-size: 10.5px;
+  color: var(--app-text-sub);
+  margin-top: 2px;
+}
+
+/* 7-day Trend */
+.stats-trend-section {
+  padding-top: 14px;
+  border-top: 1px solid var(--app-card-border);
+}
+
+.trend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.trend-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-text-main);
+}
+
+.trend-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 11px;
+  color: var(--app-text-muted);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.legend-dot.checks { background: #8b5cf6; }
+.legend-dot.downloads { background: #f59e0b; }
+
+.trend-bars-container {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  height: 90px;
+  padding: 0 4px;
+}
+
+.trend-day-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+
+.trend-bars-pair {
+  flex: 1;
+  width: 100%;
+  max-width: 44px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.trend-bar-track {
+  flex: 1;
+  height: 100%;
+  max-width: 16px;
+  display: flex;
+  align-items: flex-end;
+  background: var(--app-surface-subtle);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.trend-bar-fill {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  transition: height 0.3s ease;
+}
+
+.trend-bar-fill.checks {
+  background: #8b5cf6;
+}
+
+.trend-bar-fill.downloads {
+  background: #f59e0b;
+}
+
+.trend-date {
+  font-size: 10px;
+  color: var(--app-text-muted);
+  margin-top: 6px;
+  text-align: center;
+  white-space: nowrap;
 }
 
 /* Version Collapse Container - Connected single card */

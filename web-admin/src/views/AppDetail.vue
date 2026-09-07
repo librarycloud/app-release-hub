@@ -103,7 +103,7 @@
           </template>
 
           <!-- Version action & config toolbar -->
-          <div class="version-toolbar">
+          <div class="version-toolbar sub-card">
             <div class="version-controls">
               <div class="ctrl-item">
                 <span class="ctrl-label">强制更新:</span>
@@ -152,7 +152,11 @@
           </div>
 
           <!-- Full download info -->
-          <div class="full-info">
+          <div class="full-info sub-card">
+            <div class="sub-card-header">
+              <span class="sub-card-title">📦 安装包元数据</span>
+              <span class="sub-card-hint" v-if="group.publishedAt">发布于: {{ group.publishedAt }}</span>
+            </div>
             <el-descriptions :column="descriptionsColumn" border size="small">
               <el-descriptions-item label="完整包大小">{{ formatSize(group.size) }}</el-descriptions-item>
               <el-descriptions-item label="发布日期">{{ group.publishedAt || "—" }}</el-descriptions-item>
@@ -174,9 +178,9 @@
           </div>
 
           <!-- Release notes -->
-          <div class="notes-section">
-            <div class="notes-header">
-              <span class="notes-title">📝 更新说明</span>
+          <div class="notes-section sub-card">
+            <div class="sub-card-header">
+              <span class="sub-card-title">📝 更新说明</span>
               <el-button size="small" type="primary" link @click="openEditNotes(group)">
                 ✏️ 编辑更新说明
               </el-button>
@@ -190,9 +194,9 @@
           </div>
 
           <!-- Patch table -->
-          <div class="patch-section">
-            <div class="patch-header">
-              <strong>增量补丁 (升级到此版本)</strong>
+          <div class="patch-section sub-card">
+            <div class="sub-card-header patch-header">
+              <span class="sub-card-title">⚡ 增量差分补丁 (升级到此版本)</span>
               <el-button
                 v-if="group.missingCount > 0"
                 size="small"
@@ -238,7 +242,7 @@
                           从 {{ row.fromVersionName }} 升级将收到的叠加说明 ({{ row.cumulativeReleaseNotes.length }} 条)：
                         </div>
                         <div style="max-height:240px;overflow-y:auto">
-                          <ul style="margin:0;padding-left:16px;font-size:12px;line-height:1.7;color:#333">
+                          <ul style="margin:0;padding-left:16px;font-size:12px;line-height:1.7;color:var(--app-text-main)">
                             <li v-for="(item, idx) in row.cumulativeReleaseNotes" :key="idx">{{ item }}</li>
                           </ul>
                         </div>
@@ -996,20 +1000,51 @@ onUnmounted(() => {
   color: #f59e0b;
 }
 
-:deep(.el-collapse-item__header) {
+/* Version Collapse Cards */
+.version-collapse {
+  border: none !important;
+  background: transparent !important;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+:deep(.version-collapse .el-collapse-item) {
+  background: var(--app-card-bg);
+  border: 1px solid var(--app-card-border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--app-card-shadow);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+:deep(.version-collapse .el-collapse-item:hover) {
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+:deep(.version-collapse .el-collapse-item__header) {
+  background: var(--app-card-bg);
+  border-bottom: 1px solid transparent;
+  padding: 14px 20px;
   height: auto !important;
-  min-height: 48px;
+  min-height: 52px;
   line-height: 1.5 !important;
-  padding: 10px 0;
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
-:deep(.el-collapse-item__wrap) {
-  overflow: visible;
+:deep(.version-collapse .el-collapse-item.is-active .el-collapse-item__header) {
+  border-bottom: 1px solid var(--app-card-border);
 }
 
-:deep(.el-collapse-item__content) {
-  padding-bottom: 20px;
-  overflow: visible;
+:deep(.version-collapse .el-collapse-item__wrap) {
+  background: var(--app-card-bg);
+  border-bottom: none;
+}
+
+:deep(.version-collapse .el-collapse-item__content) {
+  padding: 18px 20px 6px 20px !important;
+  background: var(--app-card-bg);
+  box-sizing: border-box;
 }
 
 .group-title {
@@ -1049,15 +1084,50 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+/* Unified Sub-card Component for all sections */
+.sub-card {
+  background: var(--app-surface-subtle);
+  border: 1px solid var(--app-card-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  box-sizing: border-box;
+  width: 100%;
+  transition: border-color 0.2s ease;
+}
+
+.sub-card:hover {
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.sub-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sub-card-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--app-text-main);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sub-card-hint {
+  font-size: 12px;
+  color: var(--app-text-muted);
+}
+
+/* Section 1: Version Controls Toolbar */
 .version-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-  padding: 12px 16px;
-  background: var(--app-surface-subtle);
-  border-radius: 8px;
-  border: 1px solid var(--app-card-border);
   flex-wrap: wrap;
   gap: 12px;
 }
@@ -1090,9 +1160,8 @@ onUnmounted(() => {
   user-select: none;
 }
 
+/* Section 2: Full Info (Descriptions) */
 .full-info {
-  margin-bottom: 16px;
-  width: 100%;
   overflow: hidden;
 }
 
@@ -1103,20 +1172,30 @@ onUnmounted(() => {
 :deep(.full-info .el-descriptions__table) {
   table-layout: fixed !important;
   width: 100% !important;
+  background: var(--app-card-bg) !important;
+  border: 1px solid var(--app-card-border) !important;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 :deep(.full-info .el-descriptions__label) {
-  width: 105px !important;
-  max-width: 105px !important;
+  width: 110px !important;
+  max-width: 110px !important;
   white-space: nowrap;
   font-weight: 500;
   box-sizing: border-box;
+  background: var(--app-surface-subtle) !important;
+  color: var(--app-text-sub) !important;
+  border-color: var(--app-card-border) !important;
 }
 
 :deep(.full-info .el-descriptions__content) {
   word-break: break-all !important;
   overflow-wrap: anywhere !important;
   box-sizing: border-box;
+  background: var(--app-card-bg) !important;
+  color: var(--app-text-main) !important;
+  border-color: var(--app-card-border) !important;
 }
 
 .sha {
@@ -1139,27 +1218,9 @@ onUnmounted(() => {
   line-height: 1.4;
 }
 
+/* Section 3: Notes Section */
 .notes-section {
-  margin-bottom: 16px;
-  padding: 12px 16px;
-  background: var(--app-surface-subtle);
-  border-radius: 8px;
-  border: 1px solid var(--app-card-border);
-}
-
-.notes-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.notes-title {
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--app-text-main);
+  overflow: hidden;
 }
 
 .notes-list {
@@ -1178,18 +1239,14 @@ onUnmounted(() => {
   padding: 4px 0;
 }
 
+/* Section 4: Patch Section */
 .patch-section {
-  margin-top: 16px;
-  width: 100%;
+  overflow: hidden;
+  margin-top: 0;
 }
 
 .patch-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .table-responsive {
@@ -1197,8 +1254,16 @@ onUnmounted(() => {
   max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid var(--app-card-border);
+  background: var(--app-card-bg);
+}
+
+:deep(.patch-section .el-table) {
+  --el-table-bg-color: var(--app-card-bg);
+  --el-table-tr-bg-color: var(--app-card-bg);
+  --el-table-header-bg-color: var(--app-surface-subtle);
+  --el-table-border-color: var(--app-card-border);
 }
 
 .missing-list {
@@ -1224,6 +1289,20 @@ onUnmounted(() => {
   .toolbar {
     padding: 14px 12px;
     gap: 14px;
+  }
+
+  :deep(.version-collapse .el-collapse-item__header) {
+    padding: 12px 12px;
+  }
+
+  :deep(.version-collapse .el-collapse-item__content) {
+    padding: 12px 10px 4px 10px !important;
+  }
+
+  .sub-card {
+    padding: 12px 10px;
+    margin-bottom: 10px;
+    border-radius: 8px;
   }
 
   .toolbar-actions {
@@ -1254,7 +1333,6 @@ onUnmounted(() => {
   .version-toolbar {
     flex-direction: column;
     align-items: stretch;
-    padding: 12px;
   }
 
   .version-controls {

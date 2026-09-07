@@ -10,8 +10,13 @@ import {
   updateAppConfig,
   removeApp,
 } from "../services/appRegistryService.js";
-import { syncLatestRelease, generatePatchBetweenVersions, generateAllMissingPatchesForVersion } from "../services/releaseService.js";
-import { getVersionForClient, getPatchMatrix } from "../services/versionService.js";
+import {
+  syncLatestRelease,
+  generatePatchBetweenVersions,
+  generateAllMissingPatchesForVersion,
+  deleteReleaseVersion,
+} from "../services/releaseService.js";
+import { getVersionForClient, getPatchMatrix, updateVersionConfig } from "../services/versionService.js";
 
 function ok(reply, data, message = "ok") {
   return reply.send({ code: 0, message, data });
@@ -43,7 +48,7 @@ export async function clientVersionController(request, reply) {
 
 export async function serveReleaseController(request, reply) {
   const { appId, filename } = request.params;
-  if (!/^[A-Za-z0-9._-]+\.(apk|bin|exe|msi|dmg|zip)$/.test(filename)) {
+  if (!/^[A-Za-z0-9._-]+\.(apk|aab|bin|exe|msi|dmg|pkg|appimage|deb|rpm|ipa|zip|tar\.gz)$/i.test(filename)) {
     return reply.code(404).send({ code: 404, message: "文件不存在" });
   }
   if (!getApp(appId)) return reply.code(404).send({ code: 404, message: "App 不存在" });
@@ -87,8 +92,8 @@ export async function listAppsController(_request, reply) {
 }
 
 export async function createAppController(request, reply) {
-  const { appId, name, platform, githubRepo, githubApiUrl, autoSync } = request.body || {};
-  const app = registerApp({ appId, name, platform, githubRepo, githubApiUrl, autoSync });
+  const { appId, name, platform, githubRepo, githubApiUrl, autoSync, assetPattern } = request.body || {};
+  const app = registerApp({ appId, name, platform, githubRepo, githubApiUrl, autoSync, assetPattern });
   return reply.code(201).send({ code: 0, message: "App 注册成功", data: app });
 }
 
@@ -115,6 +120,7 @@ export async function syncReleaseController(request, reply) {
       githubApiUrl: app.githubApiUrl,
       token,
       platform: app.platform,
+      assetPattern: app.assetPattern,
     });
     recordSyncResult(appId);
     return ok(reply, result, "Release 已同步");
@@ -164,3 +170,20 @@ export async function syncAllAppsController(_request, reply) {
   const result = await runAutoSyncCycle();
   return ok(reply, result, "全部自动同步任务已触发");
 }
+
+export async function updateVersionController(request, reply) {
+  const { appId, versionCode } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+  const result = await updateVersionConfig(appId, versionCode, request.body || {});
+  return ok(reply, result, "版本配置已更新");
+}
+
+export async function deleteVersionController(request, reply) {
+  const { appId, versionCode } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+  const result = await deleteReleaseVersion(appId, versionCode);
+  return ok(reply, result, `版本 v${versionCode} 及关联差分包已删除`);
+}
+

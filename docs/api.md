@@ -13,7 +13,9 @@
 ### 1. 检查版本与增量更新
 
 - **方法**：`GET`
-- **路径**：`/api/apps/:appId/version/android`
+- **路径**：
+  - 通用路径：`/api/apps/:appId/version`
+  - 平台路径：`/api/apps/:appId/version/:platform`（例如 `/android`、`/windows`、`/macos` 等）
 - **参数**：
   - `versionCode`（可选，数字）：客户端当前安装的版本号
 
@@ -31,8 +33,9 @@
     "minVersionCode": 1,
     "forceUpdate": false,
     "releaseNotes": [
-      "新增中药配方智能校对",
-      "优化网络传输与离线缓存"
+      "v1.2.62: 新增配方智能校对",
+      "v1.2.62: 优化网络传输与离线缓存",
+      "v1.2.61: 修复部分分享问题"
     ],
     "changelogUrl": "https://github.com/yourorg/your-repo/releases/tag/v1.2.62",
     "publishedAt": "2026-09-06",
@@ -74,7 +77,7 @@
 
 - **方法**：`GET`
 - **路径**：`/api/apps/:appId/releases/:filename`
-- **说明**：支持 `.apk`、`.exe`、`.dmg`、`.zip` 等格式。返回文件流，带 `Content-Disposition: attachment`。
+- **说明**：支持 `.apk`、`.exe`、`.msi`、`.dmg`、`.pkg`、`.appimage`、`.deb`、`.rpm`、`.ipa`、`.zip` 等格式。返回文件流，带 `Content-Disposition: attachment`。
 
 ---
 
@@ -92,7 +95,7 @@
 
 #### 获取所有 App 列表
 - `GET /admin/apps`
-- 响应：返回所有已注册 App 数组，包含 `autoSync`、`lastSyncedAt`、`lastSyncError` 等字段。
+- 响应：返回所有已注册 App 数组，包含 `autoSync`、`assetPattern`、`lastSyncedAt`、`lastSyncError` 等字段。
 
 #### 注册新 App
 - `POST /admin/apps`
@@ -102,6 +105,7 @@
     "appId": "android-main",
     "name": "TCM Android 主版",
     "platform": "android",
+    "assetPattern": ".*\\.apk$",
     "githubRepo": "yourorg/your-repo",
     "githubApiUrl": "https://api.github.com",
     "autoSync": true
@@ -110,7 +114,7 @@
 
 #### 更新 App 配置
 - `PATCH /admin/apps/:appId`
-- 请求体：支持修改 `name`、`platform`、`githubRepo`、`autoSync` 等属性。
+- 请求体：支持修改 `name`、`platform`、`githubRepo`、`githubApiUrl`、`assetPattern`、`autoSync` 等属性。
 
 #### 删除 App
 - `DELETE /admin/apps/:appId`
@@ -129,7 +133,34 @@
 
 ---
 
-### 3. 差分补丁管理
+### 3. 版本与更新策略管理
+
+#### 更新版本配置（强制更新 / 最低兼容版本）
+- `PATCH /admin/apps/:appId/versions/:versionCode`
+- 请求体：
+  ```json
+  {
+    "forceUpdate": true,
+    "minVersionCode": 150,
+    "versionName": "1.2.62",
+    "releaseNotes": ["修复严重安全漏洞"]
+  }
+  ```
+- 字段说明：
+  - `forceUpdate` (boolean): 是否开启强制更新。开启后，低于此版本的客户端检测更新时均会标记 `forceUpdate: true`。
+  - `minVersionCode` (number): 最低兼容版本号。客户端当前版本号低于此值时将触发强制更新。
+
+#### 删除指定版本
+- `DELETE /admin/apps/:appId/versions/:versionCode`
+- 行为：
+  - 从数据库中删除该版本记录。
+  - 级联删除所有以该版本为来源（`from_version_code`）或目标（`target_version_code`）的差分补丁记录。
+  - 清理服务器磁盘上的安装包文件及相关差分包文件。
+  - 若删除的是最新版本（`is_latest`），系统自动将剩余版本中最高的版本重设为最新版本，并同步更新 `latest.{ext}`。
+
+---
+
+### 4. 差分补丁管理
 
 #### 获取指定 App 的版本矩阵
 - `GET /admin/apps/:appId/patches`

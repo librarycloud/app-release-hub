@@ -9,6 +9,8 @@ import {
   generatePatchController,
   generateAllPatchesController,
   syncAllAppsController,
+  updateVersionController,
+  deleteVersionController,
 } from "../controllers/appController.js";
 
 const auth = { preHandler: [apiKeyAuth] };
@@ -24,8 +26,13 @@ export default async function adminRoutes(fastify) {
   fastify.post("/admin/sync-all", auth, syncAllAppsController);
   fastify.post("/admin/apps/:appId/sync", auth, syncReleaseController);
 
+  // Version management
+  fastify.patch("/admin/apps/:appId/versions/:versionCode", auth, updateVersionController);
+  fastify.delete("/admin/apps/:appId/versions/:versionCode", auth, deleteVersionController);
+
   // Patch matrix and generation
   fastify.get("/admin/apps/:appId/patches", auth, patchMatrixController);
   fastify.post("/admin/apps/:appId/patches/generate", auth, generatePatchController);
   fastify.post("/admin/apps/:appId/patches/generate-all", auth, generateAllPatchesController);
 }
+

@@ -5,12 +5,22 @@ import {
   getApp,
   getLatestVersion,
   getVersionHistory,
+  getVersion,
+  getVersionsBetween,
+  updateVersion,
+  hasForceUpdateBetween,
   getPatch,
   getPatchesForTarget,
   getAllPatches,
 } from "./storageAdapter.js";
 import { checkBsdiffAvailable } from "./patchService.js";
 import { generatePatchBetweenVersions } from "./releaseService.js";
+
+function formatVersionTag(versionName, versionCode) {
+  const name = String(versionName || "").trim();
+  if (!name) return `v${versionCode}`;
+  return /^v/i.test(name) ? name : `v${name}`;
+}
 
 function resolveUrl(relUrl) {
   if (!relUrl) return "";
@@ -46,14 +56,60 @@ export async function getVersionForClient(appId, { currentVersionCode } = {}) {
   const latest = parseVersion(latestRow);
   const clientCode = Number.isInteger(Number(currentVersionCode)) ? Number(currentVersionCode) : null;
   const hasUpdate = clientCode !== null ? latest.versionCode > clientCode : true;
-  const forceUpdate = latest.forceUpdate || (clientCode !== null && clientCode < latest.minVersionCode);
+  const hasIntermediateForce = clientCode !== null && hasForceUpdateBetween(appId, clientCode, latest.versionCode);
+  const forceUpdate = Boolean(latest.forceUpdate || (clientCode !== null && clientCode < latest.minVersionCode) || hasIntermediateForce);
+
+  let releaseNotes = latest.releaseNotes;
+  let historyReleaseNotes = [
+    {
+      versionCode: latest.versionCode,
+      versionName: latest.versionName,
+      releaseNotes: latest.releaseNotes,
+    },
+  ];
+
+  if (clientCode !== null && hasUpdate) {
+    const versionsBetween = getVersionsBetween(appId, clientCode, latest.versionCode);
+    if (versionsBetween.length > 1) {
+      const cumulativeNotes = [];
+      const detailedHistory = [];
+
+      for (const row of versionsBetween) {
+        const v = parseVersion(row);
+        const tag = formatVersionTag(v.versionName, v.versionCode);
+        const notes = Array.isArray(v.releaseNotes) ? v.releaseNotes.filter(Boolean) : [];
+        if (notes.length > 0) {
+          detailedHistory.push({
+            versionCode: v.versionCode,
+            versionName: v.versionName,
+            releaseNotes: notes,
+          });
+          for (const rawNote of notes) {
+            const note = String(rawNote).trim();
+            if (!note) continue;
+            const cleanNote = note.replace(/^[-*•]\s*/, "");
+            const alreadyHasTag = cleanNote.toLowerCase().startsWith(tag.toLowerCase());
+            cumulativeNotes.push(alreadyHasTag ? cleanNote : `${tag}: ${cleanNote}`);
+          }
+        }
+      }
+
+      if (cumulativeNotes.length > 0) {
+        releaseNotes = cumulativeNotes;
+      }
+      if (detailedHistory.length > 0) {
+        historyReleaseNotes = detailedHistory;
+      }
+    }
+  }
 
   const base = {
     versionCode: latest.versionCode,
     versionName: latest.versionName,
     minVersionCode: latest.minVersionCode,
     forceUpdate,
-    releaseNotes: latest.releaseNotes,
+    releaseNotes,
+    historyReleaseNotes,
     changelogUrl: latest.changelogUrl,
     publishedAt: latest.publishedAt,
     hasUpdate,
@@ -142,8 +198,24 @@ export async function getPatchMatrix(appId) {
         const patchSize = Number(p.patch_size || 0);
         const savedBytes = ver.size > 0 ? Math.max(0, ver.size - patchSize) : 0;
         const fromVer = history.find((h) => h.versionCode === Number(p.from_version_code));
+        const patchFromCode = Number(p.from_version_code);
+        const intermediate = history.filter((h) => h.versionCode > patchFromCode && h.versionCode <= vCode);
+        const cumulativeNotes = [];
+        if (intermediate.length > 1) {
+          for (const iv of intermediate) {
+            const tag = formatVersionTag(iv.versionName, iv.versionCode);
+            for (const n of (iv.releaseNotes || [])) {
+              const clean = String(n).trim().replace(/^[-*•]\s*/, "");
+              if (clean) {
+                const already = clean.toLowerCase().startsWith(tag.toLowerCase());
+                cumulativeNotes.push(already ? clean : `${tag}: ${clean}`);
+              }
+            }
+          }
+        }
+
         return {
-          fromVersionCode: Number(p.from_version_code),
+          fromVersionCode: patchFromCode,
           fromVersionName: fromVer?.versionName || `v${p.from_version_code}`,
           targetVersionCode: vCode,
           patchFile: p.patch_file,
@@ -153,6 +225,7 @@ export async function getPatchMatrix(appId) {
           savedBytes,
           savedPercentage: ver.size > 0 ? Number(((savedBytes / ver.size) * 100).toFixed(1)) : 0,
           createdAt: p.created_at,
+          cumulativeReleaseNotes: cumulativeNotes,
         };
       })
       .sort((a, b) => b.fromVersionCode - a.fromVersionCode);
@@ -165,6 +238,8 @@ export async function getPatchMatrix(appId) {
     return {
       versionCode: vCode,
       versionName: ver.versionName,
+      minVersionCode: ver.minVersionCode,
+      forceUpdate: ver.forceUpdate,
       isLatest: ver.isLatest,
       size: ver.size,
       downloadUrl: resolveUrl(ver.fileUrl),
@@ -181,3 +256,45 @@ export async function getPatchMatrix(appId) {
 
   return { versionGroups, bsdiffAvailable, downloadBaseUrl: config.downloadBaseUrl || "" };
 }
+
+/**
+ * Update version configuration (forceUpdate, minVersionCode, releaseNotes, etc.)
+ */
+export async function updateVersionConfig(appId, versionCode, { forceUpdate, minVersionCode, releaseNotes, versionName } = {}) {
+  const app = getApp(appId);
+  if (!app) throw new Error(`App "${appId}" 不存在`);
+
+  const vCode = Number(versionCode);
+  const ver = getVersion(appId, vCode);
+  if (!ver) throw new Error(`版本 ${vCode} 不存在`);
+
+  const fields = {};
+  if (forceUpdate !== undefined) {
+    fields.force_update = Boolean(forceUpdate);
+  }
+  if (minVersionCode !== undefined) {
+    const minCode = Number(minVersionCode);
+    if (!Number.isInteger(minCode) || minCode < 1) {
+      throw new Error("minVersionCode 必须是大于等于 1 的整数");
+    }
+    fields.min_version_code = minCode;
+  }
+  if (releaseNotes !== undefined) {
+    const list = Array.isArray(releaseNotes)
+      ? releaseNotes.map(String).map((s) => s.trim()).filter(Boolean)
+      : String(releaseNotes || "")
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean);
+    fields.release_notes = JSON.stringify(list);
+  }
+  if (versionName !== undefined) {
+    const name = String(versionName).trim();
+    if (!name) throw new Error("versionName 不能为空");
+    fields.version_name = name;
+  }
+
+  const updated = updateVersion(appId, vCode, fields);
+  return parseVersion(updated);
+}
+

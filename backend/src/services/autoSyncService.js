@@ -35,6 +35,7 @@ export async function runAutoSyncCycle() {
           githubApiUrl: app.github_api_url,
           token,
           platform: app.platform,
+          assetPattern: app.asset_pattern,
         });
 
         recordSyncResult(appId);

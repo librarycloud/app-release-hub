@@ -29,6 +29,9 @@
           <div class="app-meta">
             <span>{{ app.platform }}</span>
             <span v-if="app.githubRepo" class="repo">{{ app.githubRepo }}</span>
+            <div v-if="app.assetPattern" class="asset-pat" :title="`匹配正则: ${app.assetPattern}`">
+              🔍 {{ app.assetPattern }}
+            </div>
             <div v-if="app.lastSyncedAt" class="sync-time">
               最近检查: {{ formatTime(app.lastSyncedAt) }}
             </div>
@@ -46,7 +49,7 @@
 
     <!-- Register App Dialog -->
     <el-dialog v-model="showCreate" title="注册新 App" width="480px" :close-on-click-modal="false">
-      <el-form :model="form" label-width="110px" @submit.prevent="submitCreate">
+      <el-form :model="form" label-width="120px" @submit.prevent="submitCreate">
         <el-form-item label="App ID" required>
           <el-input v-model="form.appId" placeholder="如 android-main（小写字母、数字、连字符）" />
         </el-form-item>
@@ -58,8 +61,14 @@
             <el-option label="Android" value="android" />
             <el-option label="Windows" value="windows" />
             <el-option label="macOS" value="macos" />
+            <el-option label="Linux" value="linux" />
+            <el-option label="iOS" value="ios" />
             <el-option label="其他" value="other" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="匹配正则">
+          <el-input v-model="form.assetPattern" placeholder="选填，如 .*-win-x64\.exe$ ，留空则智能推断" />
+          <span class="hint">用于精准匹配对应平台安装包文件名</span>
         </el-form-item>
         <el-form-item label="GitHub Repo">
           <el-input v-model="form.githubRepo" placeholder="如 yourorg/your-repo" />
@@ -80,6 +89,7 @@
   </div>
 </template>
 
+<script setup>
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -91,10 +101,10 @@ const loading = ref(false);
 const syncingAll = ref(false);
 const showCreate = ref(false);
 const creating = ref(false);
-const form = ref({ appId: "", name: "", platform: "android", githubRepo: "", githubApiUrl: "https://api.github.com", autoSync: false });
+const form = ref({ appId: "", name: "", platform: "android", githubRepo: "", githubApiUrl: "https://api.github.com", autoSync: false, assetPattern: "" });
 
 function platformIcon(p) {
-  return { android: "🤖", windows: "🪟", macos: "🍎", ios: "📱" }[p] || "📦";
+  return { android: "🤖", windows: "🪟", macos: "🍎", linux: "🐧", ios: "📱" }[p] || "📦";
 }
 
 function formatTime(iso) {
@@ -136,7 +146,7 @@ async function submitCreate() {
     await createApp(form.value);
     ElMessage.success("注册成功");
     showCreate.value = false;
-    form.value = { appId: "", name: "", platform: "android", githubRepo: "", githubApiUrl: "https://api.github.com", autoSync: false };
+    form.value = { appId: "", name: "", platform: "android", githubRepo: "", githubApiUrl: "https://api.github.com", autoSync: false, assetPattern: "" };
     await load();
   } catch (e) { ElMessage.error(e?.message || "注册失败"); }
   finally { creating.value = false; }
@@ -175,4 +185,5 @@ onMounted(load);
 .hint { font-size: 12px; color: #999; margin-left: 8px; }
 .sync-time { font-size: 11px; color: #888; margin-top: 4px; }
 .sync-err { font-size: 11px; color: #f56c6c; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-pat { font-size: 11px; color: #409eff; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; }
 </style>

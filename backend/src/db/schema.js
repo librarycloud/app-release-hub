@@ -9,6 +9,7 @@ export function initSchema() {
       github_repo    TEXT NOT NULL DEFAULT '',
       github_api_url TEXT NOT NULL DEFAULT 'https://api.github.com',
       auto_sync      INTEGER NOT NULL DEFAULT 0,
+      asset_pattern  TEXT NOT NULL DEFAULT '',
       last_synced_at TEXT,
       last_sync_error TEXT,
       created_at     TEXT NOT NULL DEFAULT (datetime('now')),
@@ -61,5 +62,8 @@ export function initSchema() {
   }
   if (!columns.includes("last_sync_error")) {
     db.exec("ALTER TABLE apps ADD COLUMN last_sync_error TEXT");
+  }
+  if (!columns.includes("asset_pattern")) {
+    db.exec("ALTER TABLE apps ADD COLUMN asset_pattern TEXT NOT NULL DEFAULT ''");
   }
 }

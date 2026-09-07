@@ -10,11 +10,11 @@ export function getApp(appId) {
   return db.prepare("SELECT * FROM apps WHERE app_id = ?").get(appId) || null;
 }
 
-export function insertApp({ appId, name, platform = "android", githubRepo = "", githubApiUrl = "https://api.github.com", autoSync = false }) {
+export function insertApp({ appId, name, platform = "android", githubRepo = "", githubApiUrl = "https://api.github.com", autoSync = false, assetPattern = "" }) {
   db.prepare(`
-    INSERT INTO apps (app_id, name, platform, github_repo, github_api_url, auto_sync)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(appId, name, platform, githubRepo, githubApiUrl, autoSync ? 1 : 0);
+    INSERT INTO apps (app_id, name, platform, github_repo, github_api_url, auto_sync, asset_pattern)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(appId, name, platform, githubRepo, githubApiUrl, autoSync ? 1 : 0, assetPattern || "");
 }
 
 export function getAutoSyncApps() {
@@ -22,7 +22,7 @@ export function getAutoSyncApps() {
 }
 
 export function updateApp(appId, fields) {
-  const allowed = ["name", "platform", "github_repo", "github_api_url", "auto_sync", "last_synced_at", "last_sync_error"];
+  const allowed = ["name", "platform", "github_repo", "github_api_url", "auto_sync", "asset_pattern", "last_synced_at", "last_sync_error"];
   const updates = [];
   const values = [];
   for (const [k, v] of Object.entries(fields)) {
@@ -57,7 +57,7 @@ export function getLatestVersion(appId) {
 }
 
 export function getVersionHistory(appId) {
-  return db.prepare("SELECT * FROM versions WHERE app_id = ? ORDER BY version_code DESC").all();
+  return db.prepare("SELECT * FROM versions WHERE app_id = ? ORDER BY version_code DESC").all(appId);
 }
 
 export function getVersion(appId, versionCode) {
@@ -101,6 +101,70 @@ export function upsertVersion(appId, ver) {
     );
   });
   upsert();
+}
+
+export function updateVersion(appId, versionCode, fields) {
+  const allowed = ["force_update", "min_version_code", "release_notes", "version_name", "changelog_url"];
+  const updates = [];
+  const values = [];
+  for (const [k, v] of Object.entries(fields)) {
+    if (allowed.includes(k)) {
+      updates.push(`${k} = ?`);
+      values.push(k === "force_update" ? (v ? 1 : 0) : v);
+    }
+  }
+  if (updates.length === 0) return getVersion(appId, versionCode);
+  values.push(appId, Number(versionCode));
+  db.prepare(`UPDATE versions SET ${updates.join(", ")} WHERE app_id = ? AND version_code = ?`).run(...values);
+  return getVersion(appId, versionCode);
+}
+
+export function deleteVersionRecord(appId, versionCode) {
+  const vCode = Number(versionCode);
+  const runTx = db.transaction(() => {
+    const ver = getVersion(appId, vCode);
+    if (!ver) return null;
+
+    // Delete patches where this version was either from or target
+    db.prepare(`
+      DELETE FROM patches 
+      WHERE app_id = ? AND (from_version_code = ? OR target_version_code = ?)
+    `).run(appId, vCode, vCode);
+
+    // Delete the version row
+    db.prepare("DELETE FROM versions WHERE app_id = ? AND version_code = ?").run(appId, vCode);
+
+    // If this version was latest, set new latest to highest remaining version
+    let newLatest = null;
+    if (ver.is_latest === 1) {
+      const remaining = db.prepare("SELECT * FROM versions WHERE app_id = ? ORDER BY version_code DESC LIMIT 1").get(appId);
+      if (remaining) {
+        db.prepare("UPDATE versions SET is_latest = 1 WHERE app_id = ? AND version_code = ?").run(appId, remaining.version_code);
+        newLatest = remaining;
+      }
+    }
+
+    return { deleted: ver, newLatest };
+  });
+
+  return runTx();
+}
+
+export function hasForceUpdateBetween(appId, fromVersionCode, toVersionCode) {
+  const row = db.prepare(`
+    SELECT 1 FROM versions 
+    WHERE app_id = ? AND version_code > ? AND version_code <= ? AND force_update = 1 
+    LIMIT 1
+  `).get(appId, Number(fromVersionCode), Number(toVersionCode));
+  return Boolean(row);
+}
+
+export function getVersionsBetween(appId, fromVersionCode, toVersionCode) {
+  return db.prepare(`
+    SELECT * FROM versions 
+    WHERE app_id = ? AND version_code > ? AND version_code <= ?
+    ORDER BY version_code DESC
+  `).all(appId, Number(fromVersionCode), Number(toVersionCode));
 }
 
 // ─── Patches ─────────────────────────────────────────────────────────────────

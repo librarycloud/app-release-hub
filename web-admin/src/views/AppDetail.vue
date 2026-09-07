@@ -232,7 +232,7 @@
               <el-table
                 :data="group.patches"
                 size="small"
-                style="width: 100%; min-width: 580px"
+                style="width: 100%; min-width: 630px"
                 :empty-text="group.eligibleCount === 0 ? '无历史版本可升级' : '暂无差分包，点击上方按钮生成'"
               >
                 <el-table-column label="从版本升级" prop="fromVersionName" width="120" />
@@ -245,7 +245,7 @@
                   </template>
                 </el-table-column>
                 <el-table-column label="生成时间" prop="createdAt" width="150" />
-                <el-table-column label="操作" width="200">
+                <el-table-column label="操作" width="230" min-width="230">
                   <template #default="{ row }">
                     <div class="table-actions">
                       <el-button
@@ -956,8 +956,8 @@ onUnmounted(() => {
 
 <style scoped>
 .page {
-  padding: 24px;
-  max-width: 1200px;
+  padding: 20px 16px;
+  max-width: 1400px;
   margin: 0 auto;
   box-sizing: border-box;
   width: 100%;
@@ -1054,7 +1054,7 @@ onUnmounted(() => {
 :deep(.version-collapse .el-collapse-item__header) {
   background: var(--app-card-bg);
   border-bottom: 1px solid transparent;
-  padding: 14px 20px;
+  padding: 14px 16px;
   height: auto !important;
   min-height: 52px;
   line-height: 1.5 !important;
@@ -1076,7 +1076,7 @@ onUnmounted(() => {
 }
 
 :deep(.version-collapse .el-collapse-item__content) {
-  padding: 18px 20px 8px 20px !important;
+  padding: 12px 14px 4px 14px !important;
   background: var(--app-card-bg);
   box-sizing: border-box;
 }
@@ -1099,8 +1099,8 @@ onUnmounted(() => {
 }
 
 .vc {
-  color: var(--app-text-muted);
-  font-size: 12px;
+  color: var(--app-text-sub);
+  font-size: 13px;
   margin-left: 2px;
   font-family: monospace;
 }
@@ -1113,8 +1113,8 @@ onUnmounted(() => {
 }
 
 .date {
-  font-size: 12px;
-  color: var(--app-text-muted);
+  font-size: 13px;
+  color: var(--app-text-sub);
   white-space: nowrap;
 }
 
@@ -1123,8 +1123,8 @@ onUnmounted(() => {
   background: var(--app-surface-subtle);
   border: 1px solid var(--app-card-border);
   border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 14px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
   box-sizing: border-box;
   width: 100%;
   transition: border-color 0.2s ease;
@@ -1145,7 +1145,7 @@ onUnmounted(() => {
 
 .sub-card-title {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--app-text-main);
   display: flex;
   align-items: center;
@@ -1153,7 +1153,7 @@ onUnmounted(() => {
 }
 
 .sub-card-hint {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--app-text-sub);
 }
 
@@ -1177,14 +1177,19 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 14px;
   flex-wrap: wrap;
 }
 
 .ctrl-label {
-  font-weight: 500;
-  color: var(--app-text-sub);
+  font-weight: 600;
+  color: #1e293b;
   white-space: nowrap;
+  font-size: 14px;
+}
+
+[data-theme="dark"] .ctrl-label {
+  color: #cbd5e1;
 }
 
 .help-icon {
@@ -1210,7 +1215,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 13px;
+  font-size: 14px;
   min-width: 0;
 }
 
@@ -1220,11 +1225,11 @@ onUnmounted(() => {
 }
 
 .meta-label {
-  width: 96px;
+  width: 105px;
   flex-shrink: 0;
-  color: #334155;
+  color: #1e293b;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: 0.2px;
 }
 
@@ -1236,6 +1241,7 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   color: var(--app-text-main);
+  font-size: 14px;
   font-weight: 500;
   word-break: break-all;
   overflow-wrap: anywhere;
@@ -1245,7 +1251,7 @@ onUnmounted(() => {
   display: inline-block;
   padding: 3px 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   background: var(--app-card-bg);
   border: 1px solid var(--app-card-border);
@@ -1259,7 +1265,7 @@ onUnmounted(() => {
   gap: 4px;
   padding: 3px 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
@@ -1285,7 +1291,7 @@ onUnmounted(() => {
 
 .meta-vc-code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--app-text-main);
   background: var(--app-card-bg);
@@ -1296,7 +1302,7 @@ onUnmounted(() => {
 }
 
 .sha {
-  font-size: 12px;
+  font-size: 13px;
   word-break: break-all;
   overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -1317,7 +1323,7 @@ onUnmounted(() => {
 
 .dl-link {
   color: #2563eb;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   word-break: break-all;
   overflow-wrap: anywhere;
@@ -1349,7 +1355,7 @@ onUnmounted(() => {
 .notes-list {
   margin: 6px 0 0 16px;
   padding: 0;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.8;
   color: var(--app-text-main);
   font-weight: 450;
@@ -1358,7 +1364,7 @@ onUnmounted(() => {
 }
 
 .empty-notes {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--app-text-muted);
   padding: 4px 0;
 }
@@ -1388,25 +1394,29 @@ onUnmounted(() => {
   --el-table-tr-bg-color: var(--app-card-bg);
   --el-table-header-bg-color: var(--app-surface-subtle);
   --el-table-border-color: var(--app-card-border);
+  font-size: 13px;
 }
 
-/* Table Action Buttons */
+/* Table Action Buttons - Single Row Display */
 .table-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap !important;
+  white-space: nowrap !important;
 }
 
 .action-btn {
   height: 28px !important;
   padding: 0 10px !important;
   border-radius: 6px !important;
-  font-size: 12px !important;
+  font-size: 12.5px !important;
   font-weight: 500 !important;
   display: inline-flex !important;
   align-items: center !important;
   gap: 4px !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   cursor: pointer !important;
 }
@@ -1485,7 +1495,7 @@ onUnmounted(() => {
 
 .missing-list {
   margin-top: 12px;
-  font-size: 12px;
+  font-size: 13px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1493,9 +1503,15 @@ onUnmounted(() => {
 }
 
 .missing-label {
-  color: var(--app-text-muted);
+  color: #334155;
+  font-weight: 600;
+  font-size: 13px;
   margin-right: 4px;
   white-space: nowrap;
+}
+
+[data-theme="dark"] .missing-label {
+  color: #cbd5e1;
 }
 
 @media (max-width: 768px) {

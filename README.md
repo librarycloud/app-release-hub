@@ -183,6 +183,7 @@ curl -X POST "https://hub.example.com/admin/apps/{appId}/sync" \
 | :--- | :--- | :---: | :--- |
 | `versionCode` | `number` | **推荐** | 客户端当前安装的数字版本号。不传则无法计算增量包，直接返回全量最新包 |
 | `currentVersionCode` | `number` | 否 | `versionCode` 的别名兼容参数 |
+| `policy` | `string` | 否 | 差分未就绪时的临时策略覆盖：`hide_download_link`（默认，不给下载链接）、`silent`（静默不提示）、`fallback_full`（回退全量下载） |
 
 ---
 
@@ -302,7 +303,8 @@ curl -X POST "https://hub.example.com/admin/apps/{appId}/sync" \
 | 字段 | 类型 | 说明 |
 | :--- | :--- | :--- |
 | `hasUpdate` | `boolean` | 是否存在高于客户端当前版本的更新 |
-| `updateType` | `"incremental" \| "full"` | 更新类型：`incremental` 代表增量补丁；`full` 代表全量安装包 |
+| `patchReady` | `boolean` | 差分补丁包是否已就绪。若新版本存在但差分包仍在后台生成中，则为 `false`；就绪后为 `true` |
+| `updateType` | `"incremental" \| "full" \| "pending"` | 更新类型：`incremental` 代表增量补丁；`full` 代表全量安装包；`pending` 代表差分生成中待就绪 |
 | `versionCode` | `number` | 服务端最新版本的内部版本号 |
 | `versionName` | `string` | 服务端最新版本的展示版本名（如 `"1.2.62"`） |
 | `minVersionCode`| `number` | 最低兼容版本号 |
@@ -819,6 +821,16 @@ server {
 服务端配置强制更新具有极大的灵活性：
 - 当发布了严重漏洞修复版本时，可在 Hub 管理后台立即将该版本切换为 `forceUpdate: true`，或调高 `minVersionCode`；
 - 所有受影响的旧版本客户端在下次请求接口时，收到的 `forceUpdate` 即刻为 `true`，立即锁定更新弹窗，无需重新发版。
+
+### Q4: 新版本刚发布，差分包还在生成中时，检查更新会发生什么？
+**答**：
+Hub 提供了灵活的“差分就绪策略（Patch Readiness Policy）”，可在 App 配置中设置默认行为，也允许客户端通过请求参数 `?policy=` 动态指定：
+1. **隐藏下载链接（默认推荐 `hide_download_link`）**：
+   服务端返回 `hasUpdate: true` 与 `patchReady: false`，但 `downloadUrl` 与 `patchUrl` 均为 `null`。客户端可提前向用户展示新版本日志，但下载按钮置灰或显示“差分准备中，请稍候”，待几秒后差分就绪即可极速下载，避免用户误下几十兆全量包浪费流量。
+2. **完全静默等待（`silent`）**：
+   差分包生成完毕前，直接返回 `hasUpdate: false`，不打扰用户；待差分就绪后的下一次检查才提示更新。
+3. **回退全量包（`fallback_full`）**：
+   差分包尚未就绪时，直接提供完整安装包的 `downloadUrl`。
 
 ---
 

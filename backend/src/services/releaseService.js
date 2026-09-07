@@ -26,6 +26,10 @@ const fileTimeoutMs = 180_000;
 /** In-flight patch generation dedup lock */
 const inFlightPatches = new Map();
 
+export function isPatchInFlight(appId, fromCode, targetCode) {
+  return inFlightPatches.has(`${appId}:${Number(fromCode)}->${Number(targetCode)}`);
+}
+
 /** In-flight release sync dedup lock */
 const inFlightSyncs = new Map();
 

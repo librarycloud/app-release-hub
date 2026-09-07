@@ -18,6 +18,10 @@
   - 平台路径：`/api/apps/:appId/version/:platform`（例如 `/android`、`/windows`、`/macos` 等）
 - **参数**：
   - `versionCode`（可选，数字）：客户端当前安装的版本号
+  - `policy`（可选，字符串）：临时覆盖 App 默认的“差分就绪策略”。支持：
+    - `hide_download_link`：有新版本但差分未就绪时，不提供下载链接，`patchReady: false`（默认推荐）
+    - `silent`：差分未就绪前完全静默，返回 `hasUpdate: false`
+    - `fallback_full`：差分未就绪时直接回退提供全量包下载链接
 
 #### 响应示例（命中增量更新）
 
@@ -97,6 +101,58 @@
 }
 ```
 
+#### 响应示例（有新版本但差分生成中 - hide_download_link 模式）
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "hasUpdate": true,
+    "patchReady": false,
+    "updateType": "pending",
+    "versionCode": 162,
+    "versionName": "1.2.62",
+    "minVersionCode": 1,
+    "forceUpdate": false,
+    "releaseNotes": ["新增配方智能校对", "优化网络传输与离线缓存"],
+    "historyReleaseNotes": [
+      {
+        "versionCode": 162,
+        "versionName": "1.2.62",
+        "releaseNotes": ["新增配方智能校对", "优化网络传输与离线缓存"]
+      }
+    ],
+    "changelogUrl": "https://github.com/yourorg/your-repo/releases/tag/v1.2.62",
+    "publishedAt": "2026-09-06",
+    "downloadBaseUrl": "https://hub.example.com",
+    "downloadUrl": null,
+    "patchUrl": null
+  }
+}
+```
+
+#### 响应示例（有新版本但差分生成中 - silent 静默模式）
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "hasUpdate": false,
+    "patchReady": false,
+    "updateType": "pending",
+    "versionCode": 162,
+    "versionName": "1.2.62",
+    "minVersionCode": 1,
+    "forceUpdate": false,
+    "releaseNotes": ["新增配方智能校对", "优化网络传输与离线缓存"],
+    "downloadUrl": null,
+    "patchUrl": null
+  }
+}
+```
+
 ---
 
 ### 2. 下载安装包（全量）
@@ -135,16 +191,21 @@
     "githubRepo": "yourorg/your-repo",
     "githubApiUrl": "https://api.github.com",
     "autoSync": true,
-    "autoSyncIntervalMinutes": 30
+    "autoSyncIntervalMinutes": 30,
+    "patchReadinessPolicy": "hide_download_link"
   }
   ```
 - 字段说明：
   - `autoSync` (boolean): 是否开启后台自动定时检测。
   - `autoSyncIntervalMinutes` (number): 独立自动检测周期（单位：分钟，默认为 60，最低支持 5 分钟）。
+  - `patchReadinessPolicy` (string): 差分就绪策略。可选：
+    - `hide_download_link`（默认）：新版本发布但差分包尚未生成完毕时，返回更新信息但不暴露下载链接 (`patchReady: false`, `downloadUrl: null`)。
+    - `silent`：差分包未生成完毕前，完全静默提示（返回 `hasUpdate: false`），待差分就绪后才对用户提示更新。
+    - `fallback_full`：差分包未就绪时直接提供全量安装包下载链接。
 
 #### 更新 App 配置
 - `PATCH /admin/apps/:appId`
-- 请求体：支持修改 `name`、`platform`、`githubRepo`、`githubApiUrl`、`assetPattern`、`autoSync`、`autoSyncIntervalMinutes` 等属性。
+- 请求体：支持修改 `name`、`platform`、`githubRepo`、`githubApiUrl`、`assetPattern`、`autoSync`、`autoSyncIntervalMinutes`、`patchReadinessPolicy` 等属性。
 
 #### 删除 App
 - `DELETE /admin/apps/:appId`

@@ -29,6 +29,7 @@ export function registerApp({
   autoSync = false,
   autoSyncIntervalMinutes = 60,
   assetPattern = "",
+  patchReadinessPolicy = "hide_download_link",
 }) {
   if (!appId || !/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(appId)) {
     throw new Error("appId 只能包含小写字母、数字和连字符，且不能以连字符开头或结尾");
@@ -46,6 +47,7 @@ export function registerApp({
     autoSync,
     autoSyncIntervalMinutes,
     assetPattern,
+    patchReadinessPolicy,
   });
   return getAppById(appId);
 }
@@ -62,6 +64,11 @@ export function updateAppConfig(appId, fields) {
     mapped.auto_sync_interval_minutes = Math.max(Number(fields.autoSyncIntervalMinutes) || 60, 5);
   }
   if (fields.assetPattern !== undefined) mapped.asset_pattern = fields.assetPattern;
+  if (fields.patchReadinessPolicy !== undefined) {
+    mapped.patch_readiness_policy = ["hide_download_link", "silent", "fallback_full"].includes(fields.patchReadinessPolicy)
+      ? fields.patchReadinessPolicy
+      : "hide_download_link";
+  }
   updateApp(appId, mapped);
   return getAppById(appId);
 }
@@ -81,6 +88,7 @@ function formatApp(row) {
     autoSync: row.auto_sync === 1,
     autoSyncIntervalMinutes: Number(row.auto_sync_interval_minutes || 60),
     assetPattern: row.asset_pattern || "",
+    patchReadinessPolicy: row.patch_readiness_policy || "hide_download_link",
     checkCount: Number(row.check_count || 0),
     downloadCount: Number(row.download_count || 0),
     lastSyncedAt: row.last_synced_at || null,

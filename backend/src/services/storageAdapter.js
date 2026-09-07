@@ -19,10 +19,14 @@ export function insertApp({
   autoSync = false,
   autoSyncIntervalMinutes = 60,
   assetPattern = "",
+  patchReadinessPolicy = "hide_download_link",
 }) {
+  const policy = ["hide_download_link", "silent", "fallback_full"].includes(patchReadinessPolicy)
+    ? patchReadinessPolicy
+    : "hide_download_link";
   db.prepare(`
-    INSERT INTO apps (app_id, name, platform, github_repo, github_api_url, auto_sync, auto_sync_interval_minutes, asset_pattern)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO apps (app_id, name, platform, github_repo, github_api_url, auto_sync, auto_sync_interval_minutes, asset_pattern, patch_readiness_policy)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     appId,
     name,
@@ -31,7 +35,8 @@ export function insertApp({
     githubApiUrl,
     autoSync ? 1 : 0,
     Math.max(Number(autoSyncIntervalMinutes) || 60, 5),
-    assetPattern || ""
+    assetPattern || "",
+    policy
   );
 }
 
@@ -59,6 +64,7 @@ export function updateApp(appId, fields) {
     "auto_sync",
     "auto_sync_interval_minutes",
     "asset_pattern",
+    "patch_readiness_policy",
     "last_synced_at",
     "last_sync_error",
   ];

@@ -29,6 +29,16 @@
           <span v-if="appInfo?.lastSyncedAt" class="sub" :title="`浏览器时区: ${browserTimeZone} (${timeZoneOffset})`">
             最近检查: {{ formatShortTime(appInfo.lastSyncedAt) }} <span class="tz-sub">({{ timeZoneOffset }})</span>
           </span>
+          <el-tag
+            size="small"
+            type="info"
+            effect="plain"
+            style="cursor:pointer"
+            title="点击修改差分就绪策略"
+            @click="openEditDialog"
+          >
+            ⚙️ {{ formatPolicyLabel(appInfo?.patchReadinessPolicy) }}
+          </el-tag>
           <span v-if="appInfo?.lastSyncError" class="sub warn">
             ⚠️ {{ appInfo.lastSyncError }}
           </span>
@@ -490,6 +500,14 @@
           </div>
           <span class="hint">系统按设定的时间周期在后台检测 GitHub 是否发布新 Release</span>
         </el-form-item>
+        <el-form-item label="差分就绪策略">
+          <el-select v-model="editForm.patchReadinessPolicy" style="width:100%">
+            <el-option label="隐藏下载链接 (默认推荐，差分生成完毕前不给下载地址)" value="hide_download_link" />
+            <el-option label="完全静默等待 (差分包未生成前不提示有更新)" value="silent" />
+            <el-option label="回退全量包 (差分未就绪时直接提供完整全量包)" value="fallback_full" />
+          </el-select>
+          <span class="hint">当发布新版本但差分包尚未生成完毕时，控制客户端检查更新时的表现</span>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEditDialog = false">取消</el-button>
@@ -729,6 +747,7 @@ const editForm = ref({
   githubRepo: "",
   githubApiUrl: "https://api.github.com",
   assetPattern: "",
+  patchReadinessPolicy: "hide_download_link",
   autoSync: false,
 });
 
@@ -766,6 +785,12 @@ function formatInterval(minutes) {
   return `每 ${(m / 60).toFixed(1)} 小时`;
 }
 
+function formatPolicyLabel(policy) {
+  if (policy === "silent") return "差分策略: 静默等待";
+  if (policy === "fallback_full") return "差分策略: 回退全量包";
+  return "差分策略: 隐藏下载链接";
+}
+
 function onEditIntervalPresetChange(val) {
   if (val !== "custom") {
     editForm.value.autoSyncIntervalMinutes = Number(val);
@@ -784,6 +809,7 @@ function openEditDialog() {
     githubRepo: appInfo.value.githubRepo || "",
     githubApiUrl: appInfo.value.githubApiUrl || "https://api.github.com",
     assetPattern: appInfo.value.assetPattern || "",
+    patchReadinessPolicy: appInfo.value.patchReadinessPolicy || "hide_download_link",
     autoSync: Boolean(appInfo.value.autoSync),
     autoSyncIntervalMinutes: currentMinutes,
     intervalPreset: isPreset ? currentMinutes : "custom",
@@ -801,6 +827,7 @@ async function submitEditApp() {
       githubRepo: editForm.value.githubRepo,
       githubApiUrl: editForm.value.githubApiUrl,
       assetPattern: editForm.value.assetPattern,
+      patchReadinessPolicy: editForm.value.patchReadinessPolicy,
       autoSync: editForm.value.autoSync,
       autoSyncIntervalMinutes: Number(editForm.value.autoSyncIntervalMinutes) || 60,
     };

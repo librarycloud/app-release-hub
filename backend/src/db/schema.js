@@ -15,6 +15,7 @@ export function initSchema() {
       last_sync_error TEXT,
       check_count    INTEGER NOT NULL DEFAULT 0,
       download_count INTEGER NOT NULL DEFAULT 0,
+      patch_readiness_policy TEXT NOT NULL DEFAULT 'hide_download_link',
       created_at     TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -90,6 +91,9 @@ export function initSchema() {
   }
   if (!columns.includes("download_count")) {
     db.exec("ALTER TABLE apps ADD COLUMN download_count INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.includes("patch_readiness_policy")) {
+    db.exec("ALTER TABLE apps ADD COLUMN patch_readiness_policy TEXT NOT NULL DEFAULT 'hide_download_link'");
   }
 
   const versionColumns = db.prepare("PRAGMA table_info(versions)").all().map((c) => c.name);

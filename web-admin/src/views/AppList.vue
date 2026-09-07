@@ -251,6 +251,14 @@
         <el-form-item label="GitHub API URL (默认官方)">
           <el-input v-model="form.githubApiUrl" placeholder="https://api.github.com" />
         </el-form-item>
+        <el-form-item label="差分就绪策略">
+          <el-select v-model="form.patchReadinessPolicy" style="width:100%">
+            <el-option label="隐藏下载链接 (默认推荐，差分生成完毕前不给下载地址)" value="hide_download_link" />
+            <el-option label="完全静默等待 (差分包未生成前不提示有更新)" value="silent" />
+            <el-option label="回退全量包 (差分未就绪时直接提供完整全量包)" value="fallback_full" />
+          </el-select>
+          <span class="hint">当发布新版本但差分包尚未生成好时，控制客户端检查更新时的表现</span>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showCreate = false">取消</el-button>
@@ -307,6 +315,7 @@ const form = ref({
   autoSyncIntervalMinutes: 60,
   intervalPreset: 60,
   assetPattern: "",
+  patchReadinessPolicy: "hide_download_link",
 });
 
 function onIntervalPresetChange(val) {
@@ -413,6 +422,7 @@ async function submitCreate() {
       autoSync: form.value.autoSync,
       autoSyncIntervalMinutes: Number(form.value.autoSyncIntervalMinutes) || 60,
       assetPattern: form.value.assetPattern,
+      patchReadinessPolicy: form.value.patchReadinessPolicy || "hide_download_link",
     };
     await createApp(payload);
     ElMessage.success("App 注册成功");
@@ -427,6 +437,7 @@ async function submitCreate() {
       autoSyncIntervalMinutes: 60,
       intervalPreset: 60,
       assetPattern: "",
+      patchReadinessPolicy: "hide_download_link",
     };
     await load();
   } catch (e) {

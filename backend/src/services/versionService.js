@@ -14,7 +14,7 @@ import {
   getAllPatches,
 } from "./storageAdapter.js";
 import { checkBsdiffAvailable } from "./patchService.js";
-import { generatePatchBetweenVersions } from "./releaseService.js";
+import { generatePatchBetweenVersions, isPatchInFlight } from "./releaseService.js";
 
 function formatVersionTag(versionName, versionCode) {
   const name = String(versionName || "").trim();
@@ -90,9 +90,14 @@ function parseVersion(row) {
 /**
  * Get version info for a client, including incremental patch info if available.
  */
-export async function getVersionForClient(appId, { currentVersionCode } = {}) {
+export async function getVersionForClient(appId, { currentVersionCode, policy } = {}) {
   const latestRow = getLatestVersion(appId);
   if (!latestRow) throw new Error(`App "${appId}" 暂无发布版本`);
+
+  const appRow = getApp(appId);
+  const configuredPolicy = appRow?.patch_readiness_policy || "hide_download_link";
+  const validPolicies = ["hide_download_link", "silent", "fallback_full"];
+  const effectivePolicy = validPolicies.includes(policy) ? policy : configuredPolicy;
 
   const latest = parseVersion(latestRow);
   const clientCode = Number.isInteger(Number(currentVersionCode)) ? Number(currentVersionCode) : null;
@@ -150,45 +155,13 @@ export async function getVersionForClient(appId, { currentVersionCode } = {}) {
   };
 
   if (clientCode !== null && hasUpdate) {
-    let patchRow = getPatch(appId, clientCode, latest.versionCode);
-
-    // On-demand dynamic generation if no cached patch exists
-    if (!patchRow) {
-      try {
-        const appRow = getApp(appId);
-        const ext = { android: "apk", windows: "exe", macos: "dmg", ios: "ipa" }[String(appRow?.platform || "").toLowerCase()] || "bin";
-        const releaseDir = path.resolve(config.filesDir, appId, "releases");
-        const oldFile = path.join(releaseDir, `release-v${clientCode}.${ext}`);
-        const newFile = path.join(releaseDir, `release-v${latest.versionCode}.${ext}`);
-        const [oldSt, newSt, bsdiffOk] = await Promise.all([
-          stat(oldFile).catch(() => null),
-          stat(newFile).catch(() => null),
-          checkBsdiffAvailable().catch(() => false),
-        ]);
-        if (oldSt?.isFile() && newSt?.isFile() && bsdiffOk) {
-          const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error("超时")), 6000));
-          const result = await Promise.race([
-            generatePatchBetweenVersions(appId, clientCode, latest.versionCode),
-            timeout,
-          ]);
-          if (result?.patchFile) {
-            patchRow = {
-              from_version_code: clientCode,
-              target_version_code: latest.versionCode,
-              patch_url: result.patchUrl,
-              patch_sha256: result.patchSha256,
-              patch_size: result.patchSize,
-            };
-          }
-        }
-      } catch (err) {
-        console.warn(`[versionService] 动态生成补丁失败 (v${clientCode}→v${latest.versionCode}):`, err.message);
-      }
-    }
+    const patchRow = getPatch(appId, clientCode, latest.versionCode);
 
     if (patchRow) {
       return {
         ...base,
+        hasUpdate: true,
+        patchReady: true,
         updateType: "incremental",
         patchUrl: resolveUrl(patchRow.patch_url),
         patchSha256: String(patchRow.patch_sha256 || "").toLowerCase(),
@@ -201,10 +174,50 @@ export async function getVersionForClient(appId, { currentVersionCode } = {}) {
         fallbackApkSize: latest.size,
       };
     }
+
+    // Patch is not ready yet: trigger background generation if available
+    checkBsdiffAvailable().then((bsdiffOk) => {
+      if (bsdiffOk && !isPatchInFlight(appId, clientCode, latest.versionCode)) {
+        generatePatchBetweenVersions(appId, clientCode, latest.versionCode).catch((err) => {
+          console.warn(`[versionService] 后台生成差分包失败 (v${clientCode}→v${latest.versionCode}):`, err.message);
+        });
+      }
+    }).catch(() => {});
+
+    if (effectivePolicy === "silent") {
+      return {
+        ...base,
+        hasUpdate: false,
+        patchReady: false,
+        updateType: "pending",
+        message: "差分包正在生成中，暂不提示更新",
+        downloadUrl: null,
+        patchUrl: null,
+        apkUrl: null,
+        fallbackUrl: null,
+        fallbackApkUrl: null,
+      };
+    }
+
+    if (effectivePolicy === "hide_download_link") {
+      return {
+        ...base,
+        hasUpdate: true,
+        patchReady: false,
+        updateType: "pending",
+        message: "新版本差分包正在生成中，请稍后获取下载链接",
+        downloadUrl: null,
+        patchUrl: null,
+        apkUrl: null,
+        fallbackUrl: null,
+        fallbackApkUrl: null,
+      };
+    }
   }
 
   return {
     ...base,
+    patchReady: false,
     updateType: "full",
     downloadUrl: resolveUrl(latest.fileUrl),
     apkUrl: resolveUrl(latest.fileUrl),

@@ -59,7 +59,8 @@ export async function clientVersionController(request, reply) {
   }
   reply.header("Cache-Control", "no-store, no-cache, must-revalidate").header("Pragma", "no-cache");
   const currentVersionCode = request.query.versionCode || request.query.currentVersionCode;
-  return ok(reply, await getVersionForClient(appId, { currentVersionCode }));
+  const policy = request.query.policy;
+  return ok(reply, await getVersionForClient(appId, { currentVersionCode, policy }));
 }
 
 export async function serveReleaseController(request, reply) {
@@ -118,8 +119,8 @@ export async function listAppsController(_request, reply) {
 }
 
 export async function createAppController(request, reply) {
-  const { appId, name, platform, githubRepo, githubApiUrl, autoSync, autoSyncIntervalMinutes, assetPattern } = request.body || {};
-  const app = registerApp({ appId, name, platform, githubRepo, githubApiUrl, autoSync, autoSyncIntervalMinutes, assetPattern });
+  const { appId, name, platform, githubRepo, githubApiUrl, autoSync, autoSyncIntervalMinutes, assetPattern, patchReadinessPolicy } = request.body || {};
+  const app = registerApp({ appId, name, platform, githubRepo, githubApiUrl, autoSync, autoSyncIntervalMinutes, assetPattern, patchReadinessPolicy });
   return reply.code(201).send({ code: 0, message: "App 注册成功", data: app });
 }
 

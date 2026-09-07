@@ -11,8 +11,8 @@
 
     <!-- Toolbar -->
     <div class="toolbar">
-      <div>
-        <div style="display:flex;align-items:center;gap:10px">
+      <div class="toolbar-info">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <h2 style="margin:0">{{ appInfo?.name || appId }}</h2>
           <el-tag size="small" type="info">{{ appId }}</el-tag>
           <el-tag size="small">{{ appInfo?.platform || 'android' }}</el-tag>
@@ -34,8 +34,8 @@
           </span>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <div style="display:flex;align-items:center;gap:6px" v-if="appInfo">
+      <div class="toolbar-actions">
+        <div class="auto-sync-box" v-if="appInfo">
           <span style="font-size:13px;color:#666">定时同步:</span>
           <el-switch v-model="appInfo.autoSync" @change="toggleAutoSync" />
           <el-tag
@@ -67,7 +67,7 @@
 
     <div v-loading="loading">
       <el-empty v-if="versionGroups.length === 0" description="暂无版本记录">
-        <div style="display:flex;gap:12px;justify-content:center;margin-top:12px">
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:12px">
           <el-button type="primary" :loading="syncing" @click="doSync">🔄 同步最新 Release</el-button>
           <el-button @click="openSyncHistoryDialog">📥 批量导入 GitHub 历史</el-button>
           <el-button @click="openManualVersionDialog">➕ 手动补录旧版本</el-button>
@@ -75,7 +75,7 @@
       </el-empty>
 
       <!-- Version groups -->
-      <el-collapse v-model="openGroups" accordion>
+      <el-collapse v-model="openGroups" accordion class="version-collapse">
         <el-collapse-item
           v-for="group in versionGroups"
           :key="group.versionCode"
@@ -83,13 +83,13 @@
         >
           <template #title>
             <div class="group-title">
-              <span style="display:flex;align-items:center;gap:6px">
+              <div class="group-title-main">
                 <el-tag v-if="group.isLatest" type="success" size="small">最新</el-tag>
                 <el-tag v-if="group.forceUpdate" type="danger" size="small">强制更新</el-tag>
                 <strong>{{ group.versionName }}</strong>
                 <span class="vc"> (vc: {{ group.versionCode }})</span>
-              </span>
-              <span class="group-stats">
+              </div>
+              <div class="group-stats">
                 <el-tag type="info" size="small">{{ formatSize(group.size) }}</el-tag>
                 <el-tag
                   :type="group.coveredCount === group.eligibleCount ? 'success' : 'warning'"
@@ -98,7 +98,7 @@
                   差分 {{ group.coveredCount }}/{{ group.eligibleCount }}
                 </el-tag>
                 <span class="date">{{ group.publishedAt }}</span>
-              </span>
+              </div>
             </div>
           </template>
 
@@ -143,6 +143,7 @@
               type="danger"
               size="small"
               plain
+              class="del-ver-btn"
               :loading="deletingVersion[group.versionCode]"
               @click="handleDeleteVersion(group)"
             >
@@ -152,7 +153,7 @@
 
           <!-- Full download info -->
           <div class="full-info">
-            <el-descriptions :column="2" border size="small">
+            <el-descriptions :column="descriptionsColumn" border size="small">
               <el-descriptions-item label="完整包大小">{{ formatSize(group.size) }}</el-descriptions-item>
               <el-descriptions-item label="发布日期">{{ group.publishedAt || "—" }}</el-descriptions-item>
               <el-descriptions-item label="强制更新状态">
@@ -163,10 +164,10 @@
               <el-descriptions-item label="最低兼容版本">
                 <span>vc &ge; {{ group.minVersionCode || 1 }}</span>
               </el-descriptions-item>
-              <el-descriptions-item label="SHA-256" :span="2">
+              <el-descriptions-item label="SHA-256" :span="descriptionsColumn">
                 <code class="sha">{{ group.sha256 || "—" }}</code>
               </el-descriptions-item>
-              <el-descriptions-item label="下载链接" :span="2">
+              <el-descriptions-item label="下载链接" :span="descriptionsColumn">
                 <a :href="group.downloadUrl" target="_blank" class="dl-link">{{ group.downloadUrl }}</a>
               </el-descriptions-item>
             </el-descriptions>
@@ -203,47 +204,50 @@
               </el-button>
             </div>
 
-            <el-table
-              :data="group.patches"
-              size="small"
-              :empty-text="group.eligibleCount === 0 ? '无历史版本可升级' : '暂无差分包，点击上方按钮生成'"
-            >
-              <el-table-column label="从版本升级" prop="fromVersionName" width="130" />
-              <el-table-column label="差分包大小">
-                <template #default="{ row }">{{ formatSize(row.patchSize) }}</template>
-              </el-table-column>
-              <el-table-column label="节省下载">
-                <template #default="{ row }">
-                  <el-tag type="success" size="small">省 {{ formatSize(row.savedBytes) }} ({{ row.savedPercentage }}%)</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="生成时间" prop="createdAt" width="160" />
-              <el-table-column label="操作" width="190">
-                <template #default="{ row }">
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <el-button size="small" @click="copyLink(row.patchUrl)">复制链接</el-button>
-                    <el-popover
-                      v-if="row.cumulativeReleaseNotes && row.cumulativeReleaseNotes.length > 0"
-                      placement="left"
-                      :width="360"
-                      trigger="click"
-                    >
-                      <template #reference>
-                        <el-button size="small" type="info" plain>说明叠加</el-button>
-                      </template>
-                      <div style="font-weight:600;margin-bottom:8px;font-size:13px">
-                        从 {{ row.fromVersionName }} 升级将收到的叠加说明 ({{ row.cumulativeReleaseNotes.length }} 条)：
-                      </div>
-                      <div style="max-height:240px;overflow-y:auto">
-                        <ul style="margin:0;padding-left:16px;font-size:12px;line-height:1.7;color:#333">
-                          <li v-for="(item, idx) in row.cumulativeReleaseNotes" :key="idx">{{ item }}</li>
-                        </ul>
-                      </div>
-                    </el-popover>
-                  </div>
-                </template>
-              </el-table-column>
-            </el-table>
+            <div class="table-responsive">
+              <el-table
+                :data="group.patches"
+                size="small"
+                style="width: 100%; min-width: 580px"
+                :empty-text="group.eligibleCount === 0 ? '无历史版本可升级' : '暂无差分包，点击上方按钮生成'"
+              >
+                <el-table-column label="从版本升级" prop="fromVersionName" width="120" />
+                <el-table-column label="差分包大小" width="110">
+                  <template #default="{ row }">{{ formatSize(row.patchSize) }}</template>
+                </el-table-column>
+                <el-table-column label="节省下载" min-width="140">
+                  <template #default="{ row }">
+                    <el-tag type="success" size="small">省 {{ formatSize(row.savedBytes) }} ({{ row.savedPercentage }}%)</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="生成时间" prop="createdAt" width="150" />
+                <el-table-column label="操作" width="170">
+                  <template #default="{ row }">
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <el-button size="small" @click="copyLink(row.patchUrl)">复制链接</el-button>
+                      <el-popover
+                        v-if="row.cumulativeReleaseNotes && row.cumulativeReleaseNotes.length > 0"
+                        placement="left"
+                        :width="320"
+                        trigger="click"
+                      >
+                        <template #reference>
+                          <el-button size="small" type="info" plain>说明叠加</el-button>
+                        </template>
+                        <div style="font-weight:600;margin-bottom:8px;font-size:13px">
+                          从 {{ row.fromVersionName }} 升级将收到的叠加说明 ({{ row.cumulativeReleaseNotes.length }} 条)：
+                        </div>
+                        <div style="max-height:240px;overflow-y:auto">
+                          <ul style="margin:0;padding-left:16px;font-size:12px;line-height:1.7;color:#333">
+                            <li v-for="(item, idx) in row.cumulativeReleaseNotes" :key="idx">{{ item }}</li>
+                          </ul>
+                        </div>
+                      </el-popover>
+                    </div>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
 
             <!-- Missing versions list -->
             <div v-if="group.missingVersions?.length" class="missing-list">
@@ -268,7 +272,7 @@
     <el-dialog
       v-model="showEditNotesDialog"
       :title="`编辑更新说明 - ${currentEditGroup?.versionName} (vc: ${currentEditGroup?.versionCode})`"
-      width="560px"
+      :width="isMobile ? '92%' : '560px'"
       :close-on-click-modal="false"
     >
       <div style="margin-bottom:12px;font-size:13px;color:#606266">
@@ -292,8 +296,18 @@
     </el-dialog>
 
     <!-- Edit App Config Dialog -->
-    <el-dialog v-model="showEditDialog" title="编辑 App 配置" width="500px" :close-on-click-modal="false">
-      <el-form :model="editForm" label-width="120px" @submit.prevent="submitEditApp">
+    <el-dialog
+      v-model="showEditDialog"
+      title="编辑 App 配置"
+      :width="isMobile ? '92%' : '500px'"
+      :close-on-click-modal="false"
+    >
+      <el-form
+        :model="editForm"
+        :label-width="isMobile ? 'auto' : '120px'"
+        :label-position="isMobile ? 'top' : 'left'"
+        @submit.prevent="submitEditApp"
+      >
         <el-form-item label="显示名称" required>
           <el-input v-model="editForm.name" placeholder="如 TCM Android 主版本" />
         </el-form-item>
@@ -321,7 +335,7 @@
           <el-switch v-model="editForm.autoSync" />
         </el-form-item>
         <el-form-item v-if="editForm.autoSync" label="同步检测周期">
-          <div style="display:flex;gap:10px;width:100%">
+          <div style="display:flex;gap:10px;width:100%;flex-wrap:wrap">
             <el-select v-model="editForm.intervalPreset" style="width:160px" @change="onEditIntervalPresetChange">
               <el-option label="每 15 分钟" :value="15" />
               <el-option label="每 30 分钟" :value="30" />
@@ -354,13 +368,13 @@
     <el-dialog
       v-model="showSyncHistoryDialog"
       title="批量导入 GitHub 历史版本"
-      width="520px"
+      :width="isMobile ? '92%' : '520px'"
       :close-on-click-modal="false"
     >
       <div style="margin-bottom:16px;font-size:13px;color:#606266;line-height:1.6">
         💡 系统将扫描并同步 <strong>{{ appInfo?.githubRepo || appId }}</strong> 历史 Releases，自动下载安装包与元数据，并安全维护版本序列（不会错误覆盖现有更高版本）。
       </div>
-      <el-form label-width="130px">
+      <el-form :label-width="isMobile ? 'auto' : '130px'" :label-position="isMobile ? 'top' : 'left'">
         <el-form-item label="扫描数量上限">
           <el-input-number v-model="syncHistoryForm.limit" :min="1" :max="100" style="width:160px" />
           <span style="font-size:12px;color:#909399;margin-left:10px">最近 1~100 个 Release</span>
@@ -382,12 +396,12 @@
     <el-dialog
       v-model="showManualVersionDialog"
       title="手动补录历史版本"
-      width="600px"
+      :width="isMobile ? '94%' : '600px'"
       :close-on-click-modal="false"
     >
-      <el-form label-width="120px">
+      <el-form :label-width="isMobile ? 'auto' : '120px'" :label-position="isMobile ? 'top' : 'left'">
         <el-row :gutter="16">
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="Version Code" required>
               <el-input-number
                 v-model="manualForm.versionCode"
@@ -397,7 +411,7 @@
               />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="Version Name" required>
               <el-input v-model="manualForm.versionName" placeholder="如 1.2.0" />
             </el-form-item>
@@ -405,7 +419,7 @@
         </el-row>
 
         <el-row :gutter="16">
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="发布日期">
               <el-date-picker
                 v-model="manualForm.publishedAt"
@@ -416,7 +430,7 @@
               />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="最低兼容版本">
               <el-input-number
                 v-model="manualForm.minVersionCode"
@@ -462,12 +476,12 @@
             <el-input v-model="manualForm.fileUrl" placeholder="如 https://example.com/app-v1.2.0.apk 或留空自动寻找已存在文件" />
           </el-form-item>
           <el-row :gutter="16">
-            <el-col :span="14">
+            <el-col :xs="24" :sm="14">
               <el-form-item label="文件 SHA-256">
                 <el-input v-model="manualForm.sha256" placeholder="选填，64位哈希" />
               </el-form-item>
             </el-col>
-            <el-col :span="10">
+            <el-col :xs="24" :sm="10">
               <el-form-item label="大小 (字节)">
                 <el-input-number v-model="manualForm.size" :min="0" placeholder="选填" style="width:100%" />
               </el-form-item>
@@ -499,7 +513,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage, ElNotification, ElMessageBox } from "element-plus";
 import ThemeToggle from "../components/ThemeToggle.vue";
@@ -518,6 +532,12 @@ import {
 
 const route = useRoute();
 const appId = route.params.appId;
+
+const isMobile = ref(false);
+function handleResize() {
+  isMobile.value = window.innerWidth < 768;
+}
+const descriptionsColumn = computed(() => (isMobile.value ? 1 : 2));
 
 const appInfo = ref(null);
 const loading = ref(false);
@@ -891,7 +911,15 @@ function copyLink(url) {
   ElMessage.success("已复制到剪贴板");
 }
 
-onMounted(load);
+onMounted(() => {
+  handleResize();
+  window.addEventListener("resize", handleResize);
+  load();
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", handleResize);
+});
 </script>
 
 <style scoped>
@@ -899,6 +927,8 @@ onMounted(load);
   padding: 24px;
   max-width: 1200px;
   margin: 0 auto;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .breadcrumb-bar {
@@ -906,12 +936,14 @@ onMounted(load);
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .toolbar {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 24px;
   padding: 20px;
   background: var(--app-card-bg);
@@ -920,6 +952,24 @@ onMounted(load);
   box-shadow: var(--app-card-shadow);
   flex-wrap: wrap;
   gap: 16px;
+}
+
+.toolbar-info {
+  flex: 1;
+  min-width: 260px;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.auto-sync-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .sub-row {
@@ -934,6 +984,7 @@ onMounted(load);
   font-size: 13px;
   color: var(--app-accent);
   font-family: monospace;
+  word-break: break-all;
 }
 
 .sub {
@@ -945,18 +996,43 @@ onMounted(load);
   color: #f59e0b;
 }
 
+:deep(.el-collapse-item__header) {
+  height: auto !important;
+  min-height: 48px;
+  line-height: 1.5 !important;
+  padding: 10px 0;
+}
+
+:deep(.el-collapse-item__wrap) {
+  overflow: visible;
+}
+
+:deep(.el-collapse-item__content) {
+  padding-bottom: 20px;
+  overflow: visible;
+}
+
 .group-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding-right: 14px;
+  padding-right: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.group-title-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .vc {
   color: var(--app-text-muted);
   font-size: 12px;
-  margin-left: 6px;
+  margin-left: 2px;
   font-family: monospace;
 }
 
@@ -964,11 +1040,13 @@ onMounted(load);
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .date {
   font-size: 12px;
   color: var(--app-text-muted);
+  white-space: nowrap;
 }
 
 .version-toolbar {
@@ -987,7 +1065,7 @@ onMounted(load);
 .version-controls {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
@@ -996,11 +1074,13 @@ onMounted(load);
   align-items: center;
   gap: 8px;
   font-size: 13px;
+  flex-wrap: wrap;
 }
 
 .ctrl-label {
   font-weight: 500;
   color: var(--app-text-sub);
+  white-space: nowrap;
 }
 
 .help-icon {
@@ -1012,20 +1092,51 @@ onMounted(load);
 
 .full-info {
   margin-bottom: 16px;
+  width: 100%;
+  overflow: hidden;
+}
+
+:deep(.full-info .el-descriptions) {
+  width: 100%;
+}
+
+:deep(.full-info .el-descriptions__table) {
+  table-layout: fixed !important;
+  width: 100% !important;
+}
+
+:deep(.full-info .el-descriptions__label) {
+  width: 105px !important;
+  max-width: 105px !important;
+  white-space: nowrap;
+  font-weight: 500;
+  box-sizing: border-box;
+}
+
+:deep(.full-info .el-descriptions__content) {
+  word-break: break-all !important;
+  overflow-wrap: anywhere !important;
+  box-sizing: border-box;
 }
 
 .sha {
   font-size: 11px;
   word-break: break-all;
+  overflow-wrap: anywhere;
   font-family: monospace;
   color: var(--app-text-muted);
+  display: block;
+  line-height: 1.4;
 }
 
 .dl-link {
   color: var(--app-accent);
   font-size: 12px;
   word-break: break-all;
+  overflow-wrap: anywhere;
   font-family: monospace;
+  display: block;
+  line-height: 1.4;
 }
 
 .notes-section {
@@ -1041,6 +1152,8 @@ onMounted(load);
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .notes-title {
@@ -1055,6 +1168,8 @@ onMounted(load);
   font-size: 13px;
   line-height: 1.8;
   color: var(--app-text-sub);
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .empty-notes {
@@ -1065,6 +1180,7 @@ onMounted(load);
 
 .patch-section {
   margin-top: 16px;
+  width: 100%;
 }
 
 .patch-header {
@@ -1072,16 +1188,101 @@ onMounted(load);
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.table-responsive {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 6px;
+  border: 1px solid var(--app-card-border);
 }
 
 .missing-list {
-  margin-top: 10px;
+  margin-top: 12px;
   font-size: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .missing-label {
   color: var(--app-text-muted);
-  margin-right: 6px;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .page {
+    padding: 12px 10px;
+  }
+
+  .toolbar {
+    padding: 14px 12px;
+    gap: 14px;
+  }
+
+  .toolbar-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .toolbar-actions .auto-sync-box {
+    grid-column: 1 / -1;
+    margin-bottom: 4px;
+  }
+
+  .toolbar-actions .el-button {
+    margin: 0 !important;
+    width: 100%;
+  }
+
+  .toolbar-actions .el-button--primary {
+    grid-column: 1 / -1;
+  }
+
+  .group-title {
+    padding-right: 4px;
+  }
+
+  .version-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .version-controls {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    gap: 12px;
+  }
+
+  .ctrl-item {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .del-ver-btn {
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  :deep(.full-info .el-descriptions__label) {
+    width: 95px !important;
+    max-width: 95px !important;
+    font-size: 12px;
+  }
+
+  :deep(.full-info .el-descriptions__content) {
+    font-size: 12px;
+  }
 }
 </style>
 

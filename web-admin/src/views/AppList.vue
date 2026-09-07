@@ -170,7 +170,7 @@
     </main>
 
     <!-- Register App Dialog -->
-    <el-dialog v-model="showCreate" title="注册新 App" width="500px" :close-on-click-modal="false">
+    <el-dialog v-model="showCreate" title="注册新 App" :width="isMobile ? '92%' : '500px'" :close-on-click-modal="false">
       <el-form :model="form" label-position="top" @submit.prevent="submitCreate">
         <el-form-item label="App ID (唯一标识符)" required>
           <el-input v-model="form.appId" placeholder="如 android-main（仅限小写字母、数字、短横线）" />
@@ -179,7 +179,7 @@
           <el-input v-model="form.name" placeholder="如 TCM Android 主版本" />
         </el-form-item>
         <el-row :gutter="16">
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="目标平台">
               <el-select v-model="form.platform" style="width:100%">
                 <el-option label="🤖 Android (.apk/.aab)" value="android" />
@@ -191,7 +191,7 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :xs="24" :sm="12">
             <el-form-item label="开启定时自动同步">
               <el-switch v-model="form.autoSync" style="margin-top: 4px" />
             </el-form-item>
@@ -239,7 +239,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { Refresh, Plus } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
@@ -247,6 +247,11 @@ import { listApps, createApp, deleteApp, syncAllApps, clearApiKey } from "../api
 import ThemeToggle from "../components/ThemeToggle.vue";
 
 const router = useRouter();
+const isMobile = ref(false);
+function handleResize() {
+  isMobile.value = window.innerWidth < 768;
+}
+
 const apps = ref([]);
 const loading = ref(false);
 const syncingAll = ref(false);
@@ -409,7 +414,15 @@ function logout() {
   router.push("/login");
 }
 
-onMounted(load);
+onMounted(() => {
+  handleResize();
+  window.addEventListener("resize", handleResize);
+  load();
+});
+
+onUnmounted(() => {
+  window.removeEventListener("resize", handleResize);
+});
 </script>
 
 <style scoped>
@@ -721,5 +734,73 @@ html.dark .pill-count {
   padding-top: 14px;
   margin-top: auto;
   border-top: 1px solid var(--app-card-border);
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 10px 12px;
+  }
+
+  .navbar-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .nav-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .main-content {
+    padding: 14px 12px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .stat-card {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .stat-icon-wrap {
+    width: 38px;
+    height: 38px;
+    font-size: 18px;
+  }
+
+  .stat-value {
+    font-size: 17px;
+  }
+
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .search-wrap {
+    width: 100%;
+  }
+
+  .search-wrap :deep(.el-input) {
+    width: 100% !important;
+  }
+
+  .apps-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -42,8 +42,12 @@ async function submit() {
   try {
     await listApps();
     router.push("/");
-  } catch {
-    ElMessage.error("API Key 无效或服务器无法连接");
+  } catch (err) {
+    const errorMsg =
+      err?.message ||
+      err?.response?.data?.message ||
+      (err?.code === "ERR_NETWORK" ? "无法连接后端服务器，请确认后端已启动且网络畅通" : "API Key 无效或验证失败");
+    ElMessage.error(errorMsg);
     setApiKey("");
   } finally {
     loading.value = false;

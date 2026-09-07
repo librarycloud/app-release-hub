@@ -16,7 +16,7 @@ export const config = {
   port: Number(process.env.PORT || 3000),
   host: process.env.HOST || "0.0.0.0",
   nodeEnv: process.env.NODE_ENV || "development",
-  adminApiKey: (process.env.ADMIN_API_KEY || "").trim(),
+  adminApiKey: (process.env.ADMIN_API_KEY || "").trim().replace(/^["']|["']$/g, ""),
   dbPath: process.env.DB_PATH || "data/hub.db",
   filesDir: process.env.FILES_DIR || "data/files",
   // Optional CDN/download base URL override for served files

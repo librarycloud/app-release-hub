@@ -391,7 +391,9 @@ describe("Historical Version Sync & Manual Backfill Tests", () => {
     expect(clientData.hasUpdate).toBe(true);
     expect(clientData.versionCode).toBe(150);
 
-    expect(clientData.releaseNotes.some((n) => n.includes("v1.5.0: 全新升级 1.5.0"))).toBe(true);
-    expect(clientData.releaseNotes.some((n) => n.includes("v0.7.0: 0.7.0 更新内容"))).toBe(true);
+    expect(clientData.releaseNotes.some((n) => n.includes("【v1.5.0】"))).toBe(true);
+    expect(clientData.releaseNotes.some((n) => n.includes("全新升级 1.5.0"))).toBe(true);
+    expect(clientData.releaseNotes.some((n) => n.includes("【v0.7.0】"))).toBe(true);
+    expect(clientData.releaseNotes.some((n) => n.includes("0.7.0 更新内容"))).toBe(true);
   });
 });

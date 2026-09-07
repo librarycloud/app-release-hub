@@ -22,6 +22,46 @@ function formatVersionTag(versionName, versionCode) {
   return /^v/i.test(name) ? name : `v${name}`;
 }
 
+/**
+ * Format a list of version objects into grouped cumulative release notes (Style B)
+ * Example output:
+ * [
+ *   "【v1.2.3】",
+ *   "• 更新了xx",
+ *   "• 修复了xx",
+ *   "",
+ *   "【v1.2.2】",
+ *   "• 更新了xx",
+ *   "• 修复了xx"
+ * ]
+ */
+function buildGroupedCumulativeNotes(versionList) {
+  const result = [];
+  for (const v of versionList) {
+    const tag = formatVersionTag(v.versionName, v.versionCode);
+    const rawNotes = Array.isArray(v.releaseNotes) ? v.releaseNotes.filter(Boolean) : [];
+    const validNotes = [];
+    for (const raw of rawNotes) {
+      let clean = String(raw).trim().replace(/^[-*•]\s*/, "");
+      if (!clean) continue;
+      const tagPattern = new RegExp(`^(\\[|【)?${tag}(\\]|】|:|：|\\s)\\s*`, "i");
+      clean = clean.replace(tagPattern, "");
+      if (clean) {
+        validNotes.push(`• ${clean}`);
+      }
+    }
+
+    if (validNotes.length > 0) {
+      if (result.length > 0) {
+        result.push("");
+      }
+      result.push(`【${tag}】`);
+      result.push(...validNotes);
+    }
+  }
+  return result;
+}
+
 function resolveUrl(relUrl) {
   if (!relUrl) return "";
   if (/^https?:\/\//i.test(relUrl)) return relUrl;
@@ -72,12 +112,10 @@ export async function getVersionForClient(appId, { currentVersionCode } = {}) {
   if (clientCode !== null && hasUpdate) {
     const versionsBetween = getVersionsBetween(appId, clientCode, latest.versionCode);
     if (versionsBetween.length > 1) {
-      const cumulativeNotes = [];
+      const parsedBetween = versionsBetween.map(parseVersion);
       const detailedHistory = [];
 
-      for (const row of versionsBetween) {
-        const v = parseVersion(row);
-        const tag = formatVersionTag(v.versionName, v.versionCode);
+      for (const v of parsedBetween) {
         const notes = Array.isArray(v.releaseNotes) ? v.releaseNotes.filter(Boolean) : [];
         if (notes.length > 0) {
           detailedHistory.push({
@@ -85,16 +123,10 @@ export async function getVersionForClient(appId, { currentVersionCode } = {}) {
             versionName: v.versionName,
             releaseNotes: notes,
           });
-          for (const rawNote of notes) {
-            const note = String(rawNote).trim();
-            if (!note) continue;
-            const cleanNote = note.replace(/^[-*•]\s*/, "");
-            const alreadyHasTag = cleanNote.toLowerCase().startsWith(tag.toLowerCase());
-            cumulativeNotes.push(alreadyHasTag ? cleanNote : `${tag}: ${cleanNote}`);
-          }
         }
       }
 
+      const cumulativeNotes = buildGroupedCumulativeNotes(parsedBetween);
       if (cumulativeNotes.length > 0) {
         releaseNotes = cumulativeNotes;
       }
@@ -206,19 +238,7 @@ export async function getPatchMatrix(appId) {
         const fromVer = history.find((h) => h.versionCode === Number(p.from_version_code));
         const patchFromCode = Number(p.from_version_code);
         const intermediate = history.filter((h) => h.versionCode > patchFromCode && h.versionCode <= vCode);
-        const cumulativeNotes = [];
-        if (intermediate.length > 1) {
-          for (const iv of intermediate) {
-            const tag = formatVersionTag(iv.versionName, iv.versionCode);
-            for (const n of (iv.releaseNotes || [])) {
-              const clean = String(n).trim().replace(/^[-*•]\s*/, "");
-              if (clean) {
-                const already = clean.toLowerCase().startsWith(tag.toLowerCase());
-                cumulativeNotes.push(already ? clean : `${tag}: ${clean}`);
-              }
-            }
-          }
-        }
+        const cumulativeNotes = intermediate.length > 1 ? buildGroupedCumulativeNotes(intermediate) : [];
 
         return {
           fromVersionCode: patchFromCode,

@@ -206,9 +206,12 @@ curl -X POST "https://hub.example.com/admin/apps/{appId}/sync" \
     "minVersionCode": 150,
     "forceUpdate": false,
     "releaseNotes": [
-      "v1.2.62: 新增配方智能校对功能",
-      "v1.2.62: 优化离线缓存加载速度",
-      "v1.2.61: 修复推送通知未及时到达问题"
+      "【v1.2.62】",
+      "• 新增配方智能校对功能",
+      "• 优化离线缓存加载速度",
+      "",
+      "【v1.2.61】",
+      "• 修复推送通知未及时到达问题"
     ],
     "historyReleaseNotes": [
       {

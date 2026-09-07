@@ -354,16 +354,26 @@
                       >
                         <template #reference>
                           <el-button size="small" class="action-btn notes-btn">
-                            📋 说明 ({{ row.cumulativeReleaseNotes.length }})
+                            📋 叠加说明
                           </el-button>
                         </template>
                         <div class="popover-title">
-                          从 {{ row.fromVersionName }} 升级将收到的叠加说明 ({{ row.cumulativeReleaseNotes.length }} 条)：
+                          从 {{ row.fromVersionName }} 升级将收到的合并更新说明：
                         </div>
                         <div class="popover-content">
-                          <ul class="popover-list">
-                            <li v-for="(item, idx) in row.cumulativeReleaseNotes" :key="idx">{{ item }}</li>
-                          </ul>
+                          <div class="popover-notes-wrap">
+                            <div
+                              v-for="(item, idx) in row.cumulativeReleaseNotes"
+                              :key="idx"
+                              :class="{
+                                'popover-ver-tag': item.startsWith('【'),
+                                'popover-empty-line': !item,
+                                'popover-note-line': item && !item.startsWith('【')
+                              }"
+                            >
+                              {{ item }}
+                            </div>
+                          </div>
                         </div>
                       </el-popover>
                     </div>
@@ -1818,12 +1828,32 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
-.popover-list {
-  margin: 0 0 0 16px;
-  padding: 0;
+.popover-notes-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.popover-ver-tag {
+  font-weight: 700;
+  color: var(--app-accent);
+  font-size: 13px;
+  margin-top: 8px;
+  margin-bottom: 3px;
+}
+
+.popover-ver-tag:first-child {
+  margin-top: 0;
+}
+
+.popover-empty-line {
+  height: 6px;
+}
+
+.popover-note-line {
   font-size: 12px;
-  line-height: 1.8;
   color: var(--app-text-sub);
+  line-height: 1.6;
+  padding-left: 2px;
 }
 
 .missing-list {

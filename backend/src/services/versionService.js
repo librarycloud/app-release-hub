@@ -229,7 +229,11 @@ export async function getPatchMatrix(appId) {
           patchSize,
           savedBytes,
           savedPercentage: ver.size > 0 ? Number(((savedBytes / ver.size) * 100).toFixed(1)) : 0,
-          createdAt: p.created_at,
+          createdAt: p.created_at
+            ? (String(p.created_at).includes("T")
+                ? (String(p.created_at).endsWith("Z") ? p.created_at : `${p.created_at}Z`)
+                : `${String(p.created_at).replace(" ", "T")}Z`)
+            : null,
           cumulativeReleaseNotes: cumulativeNotes,
         };
       })

@@ -26,8 +26,8 @@
           </span>
           <span class="sub" v-if="bsdiffAvailable">✅ bsdiff 可用</span>
           <span class="sub warn" v-else>⚠️ bsdiff 未安装，无法生成差分包</span>
-          <span v-if="appInfo?.lastSyncedAt" class="sub">
-            最近检查: {{ formatTime(appInfo.lastSyncedAt) }}
+          <span v-if="appInfo?.lastSyncedAt" class="sub" :title="`浏览器时区: ${browserTimeZone} (${timeZoneOffset})`">
+            最近检查: {{ formatShortTime(appInfo.lastSyncedAt) }} <span class="tz-sub">({{ timeZoneOffset }})</span>
           </span>
           <span v-if="appInfo?.lastSyncError" class="sub warn">
             ⚠️ {{ appInfo.lastSyncError }}
@@ -244,7 +244,16 @@
                     <el-tag type="success" size="small">省 {{ formatSize(row.savedBytes) }} ({{ row.savedPercentage }}%)</el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="生成时间" prop="createdAt" width="150" />
+                <el-table-column label="生成时间" width="180">
+                  <template #header>
+                    <span>生成时间 <span class="tz-tag">{{ timeZoneOffset }}</span></span>
+                  </template>
+                  <template #default="{ row }">
+                    <span :title="`浏览器时区: ${browserTimeZone} (${timeZoneOffset})`" class="time-cell">
+                      {{ formatDateTime(row.createdAt) }}
+                    </span>
+                  </template>
+                </el-table-column>
                 <el-table-column label="操作" width="230" min-width="230">
                   <template #default="{ row }">
                     <div class="table-actions">
@@ -550,6 +559,12 @@ import { useRoute } from "vue-router";
 import { ElMessage, ElNotification, ElMessageBox } from "element-plus";
 import ThemeToggle from "../components/ThemeToggle.vue";
 import {
+  getBrowserTimeZone,
+  getTimeZoneOffsetString,
+  formatDateTime,
+  formatShortTime,
+} from "../utils/time.js";
+import {
   listApps,
   updateApp,
   syncRelease,
@@ -564,6 +579,9 @@ import {
 
 const route = useRoute();
 const appId = route.params.appId;
+
+const timeZoneOffset = getTimeZoneOffsetString();
+const browserTimeZone = getBrowserTimeZone();
 
 const isMobile = ref(false);
 function handleResize() {
@@ -687,13 +705,7 @@ function formatSize(bytes) {
 }
 
 function formatTime(iso) {
-  if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  } catch {
-    return iso;
-  }
+  return formatShortTime(iso);
 }
 
 async function load() {
@@ -1395,6 +1407,39 @@ onUnmounted(() => {
   --el-table-header-bg-color: var(--app-surface-subtle);
   --el-table-border-color: var(--app-card-border);
   font-size: 13px;
+}
+
+.tz-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: #2563eb;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 4px;
+  letter-spacing: 0.2px;
+  vertical-align: middle;
+}
+
+[data-theme="dark"] .tz-tag {
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.tz-sub {
+  font-size: 11px;
+  opacity: 0.85;
+  margin-left: 2px;
+  font-weight: 500;
+}
+
+.time-cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--app-text-main);
+  white-space: nowrap;
 }
 
 /* Table Action Buttons - Single Row Display */

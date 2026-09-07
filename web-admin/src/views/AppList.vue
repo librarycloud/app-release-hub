@@ -134,7 +134,7 @@
               </div>
               <div class="detail-row">
                 <span class="detail-label">检查:</span>
-                <span class="detail-val">{{ formatTime(app.lastSyncedAt) }}</span>
+                <span class="detail-val" :title="`浏览器时区: ${browserTimeZone} (${timeZoneOffset})`">{{ formatTime(app.lastSyncedAt) }}</span>
               </div>
               <div v-if="app.lastSyncError" class="sync-error-banner" :title="app.lastSyncError">
                 ⚠️ {{ app.lastSyncError }}
@@ -245,8 +245,15 @@ import { Refresh, Plus } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { listApps, createApp, deleteApp, syncAllApps, clearApiKey } from "../api/appHub.js";
 import ThemeToggle from "../components/ThemeToggle.vue";
+import {
+  getBrowserTimeZone,
+  getTimeZoneOffsetString,
+  formatChineseTime,
+} from "../utils/time.js";
 
 const router = useRouter();
+const timeZoneOffset = getTimeZoneOffsetString();
+const browserTimeZone = getBrowserTimeZone();
 const isMobile = ref(false);
 function handleResize() {
   isMobile.value = window.innerWidth < 768;
@@ -329,13 +336,7 @@ function platformTagType(p) {
 }
 
 function formatTime(iso) {
-  if (!iso) return "尚未检查";
-  try {
-    const d = new Date(iso);
-    return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  } catch {
-    return iso;
-  }
+  return formatChineseTime(iso);
 }
 
 async function doSyncAll() {

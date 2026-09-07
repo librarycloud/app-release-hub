@@ -200,4 +200,42 @@ async function submit() {
   font-size: 11px;
   color: var(--app-text-muted);
 }
+
+@media (max-width: 480px) {
+  .login-wrap {
+    padding: 16px 12px;
+  }
+
+  .theme-bar {
+    top: 16px;
+    right: 16px;
+  }
+
+  .login-card {
+    padding: 6px 2px;
+  }
+
+  .logo-badge {
+    width: 52px;
+    height: 52px;
+    margin-bottom: 10px;
+  }
+
+  .logo-emoji {
+    font-size: 24px;
+  }
+
+  .login-title {
+    font-size: 20px;
+  }
+
+  .subtitle {
+    font-size: 12px;
+  }
+
+  .submit-btn {
+    height: 44px;
+    font-size: 15px;
+  }
+}
 </style>

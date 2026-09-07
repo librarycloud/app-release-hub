@@ -13,12 +13,14 @@
         <div class="nav-actions">
           <ThemeToggle />
           <el-button :loading="syncingAll" :icon="Refresh" @click="doSyncAll">
-            检查全部更新
+            <span class="btn-text-full">检查全部更新</span>
+            <span class="btn-text-short">检查更新</span>
           </el-button>
           <el-button type="primary" :icon="Plus" @click="showCreate = true">
-            注册新 App
+            <span class="btn-text-full">注册新 App</span>
+            <span class="btn-text-short">注册 App</span>
           </el-button>
-          <el-button text @click="logout">
+          <el-button text @click="logout" class="logout-btn">
             退出
           </el-button>
         </div>
@@ -802,22 +804,37 @@ html.dark .pill-count {
   border-top: 1px solid var(--app-card-border);
 }
 
+.btn-text-short {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .navbar {
-    padding: 10px 12px;
+    padding: 10px 14px;
   }
 
   .navbar-content {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
+    gap: 10px;
   }
 
   .nav-actions {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    align-items: center;
+    justify-content: space-between;
     gap: 8px;
+    width: 100%;
+  }
+
+  .nav-actions .el-button {
+    flex: 1;
+    padding: 0 10px;
+  }
+
+  .nav-actions .logout-btn {
+    flex: 0 0 auto;
+    padding: 0 8px;
   }
 
   .main-content {
@@ -825,29 +842,68 @@ html.dark .pill-count {
   }
 
   .stats-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
   }
 
   .stat-card {
-    padding: 12px 14px;
+    padding: 10px 12px;
     gap: 10px;
+    border-radius: 10px;
+  }
+
+  .stat-card:last-child {
+    grid-column: 1 / -1;
   }
 
   .stat-icon-wrap {
-    width: 38px;
-    height: 38px;
-    font-size: 18px;
+    width: 36px;
+    height: 36px;
+    font-size: 17px;
+    border-radius: 8px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    margin-bottom: 2px;
   }
 
   .stat-value {
-    font-size: 17px;
+    font-size: 16px;
+  }
+
+  .stat-unit {
+    font-size: 11px;
+  }
+
+  .stat-sub-text {
+    font-size: 10px;
   }
 
   .filter-bar {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .platform-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    width: 100%;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .platform-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-pill {
+    flex-shrink: 0;
+    padding: 5px 12px;
+    font-size: 12px;
   }
 
   .search-wrap {
@@ -860,13 +916,29 @@ html.dark .pill-count {
 
   .apps-grid {
     grid-template-columns: 1fr;
-    gap: 14px;
+    gap: 12px;
+  }
+
+  .app-card {
+    padding: 14px 14px;
   }
 }
 
-@media (max-width: 480px) {
-  .stats-grid {
-    grid-template-columns: 1fr;
+@media (max-width: 600px) {
+  .btn-text-full {
+    display: none;
+  }
+
+  .btn-text-short {
+    display: inline;
+  }
+
+  .brand-title {
+    font-size: 16px;
+  }
+
+  .brand-sub {
+    font-size: 11px;
   }
 }
 </style>

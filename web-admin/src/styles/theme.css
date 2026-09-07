@@ -131,14 +131,77 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+.mobile-table-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--app-accent);
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  background: var(--app-surface-subtle);
+  border-radius: 6px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
 /* Global Dialog & Table Constraints to Prevent Edge Overflow */
 .el-dialog {
-  max-width: calc(100vw - 24px) !important;
+  max-width: calc(100vw - 20px) !important;
   box-sizing: border-box !important;
 }
 
 .el-dialog__body {
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+/* Mobile Global Optimizations */
+@media (max-width: 768px) {
+  html, body {
+    padding-bottom: env(safe-area-inset-bottom, 12px);
+  }
+
+  button, a, .el-button, [role="button"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent iOS Safari auto-zoom on input focus */
+  .el-input__inner,
+  .el-textarea__inner,
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  .el-dialog {
+    margin: 16px auto !important;
+    border-radius: 14px !important;
+  }
+
+  .el-dialog__header {
+    padding: 16px 16px 10px 16px !important;
+  }
+
+  .el-dialog__body {
+    padding: 14px 16px !important;
+  }
+
+  .el-dialog__footer {
+    padding: 10px 16px 16px 16px !important;
+  }
+
+  .el-message {
+    max-width: calc(100vw - 32px) !important;
+    min-width: 240px !important;
+  }
+
+  .el-message-box {
+    max-width: calc(100vw - 28px) !important;
+    width: 92% !important;
+    border-radius: 14px !important;
+  }
 }
 

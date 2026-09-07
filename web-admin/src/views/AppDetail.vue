@@ -54,10 +54,12 @@
           ⚙️ 配置
         </el-button>
         <el-button @click="openSyncHistoryDialog">
-          📥 批量导入历史
+          <span class="btn-text-full">📥 批量导入历史</span>
+          <span class="btn-text-short">📥 批量导入</span>
         </el-button>
         <el-button @click="openManualVersionDialog">
-          ➕ 补录旧版本
+          <span class="btn-text-full">➕ 补录旧版本</span>
+          <span class="btn-text-short">➕ 补录版本</span>
         </el-button>
         <el-button type="primary" :loading="syncing" @click="doSync">
           🔄 同步最新 Release
@@ -301,6 +303,9 @@
             </div>
 
             <div class="table-responsive">
+              <div class="mobile-table-hint" v-if="isMobile && group.patches?.length > 0">
+                👈 左右滑动查看完整差分表格 👉
+              </div>
               <el-table
                 :data="group.patches"
                 size="small"
@@ -343,8 +348,8 @@
                       </el-button>
                       <el-popover
                         v-if="row.cumulativeReleaseNotes && row.cumulativeReleaseNotes.length > 0"
-                        placement="left"
-                        :width="340"
+                        :placement="isMobile ? 'top' : 'left'"
+                        :width="isMobile ? 260 : 340"
                         trigger="click"
                       >
                         <template #reference>
@@ -566,7 +571,7 @@
         </el-form-item>
 
         <el-form-item label="安装包提供方式">
-          <el-radio-group v-model="manualPackageMode">
+          <el-radio-group v-model="manualPackageMode" :class="{ 'mobile-radio-group': isMobile }">
             <el-radio-button label="file">本地上传安装包</el-radio-button>
             <el-radio-button label="url">填写下载 URL / 留空探测</el-radio-button>
           </el-radio-group>
@@ -1842,28 +1847,39 @@ onUnmounted(() => {
   color: #cbd5e1;
 }
 
+.btn-text-short {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .page {
     padding: 12px 10px;
   }
 
+  .breadcrumb-bar {
+    margin-bottom: 12px;
+  }
+
+  .breadcrumb-bar :deep(.el-breadcrumb) {
+    font-size: 13px;
+    max-width: calc(100% - 50px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .toolbar {
-    padding: 14px 12px;
-    gap: 14px;
-  }
-
-  :deep(.version-collapse .el-collapse-item__header) {
     padding: 12px 12px;
+    gap: 12px;
   }
 
-  :deep(.version-collapse .el-collapse-item__content) {
-    padding: 12px 10px 4px 10px !important;
+  .toolbar-info h2 {
+    font-size: 18px;
   }
 
-  .sub-card {
-    padding: 12px 10px;
-    margin-bottom: 10px;
-    border-radius: 8px;
+  .sub-row {
+    font-size: 12px;
+    gap: 6px;
   }
 
   .toolbar-actions {
@@ -1876,36 +1892,157 @@ onUnmounted(() => {
   .toolbar-actions .auto-sync-box {
     grid-column: 1 / -1;
     margin-bottom: 4px;
+    padding: 8px 10px;
+    background: var(--app-surface-subtle);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
   .toolbar-actions .el-button {
     margin: 0 !important;
     width: 100%;
+    font-size: 13px;
+    padding: 0 8px;
   }
 
   .toolbar-actions .el-button--primary {
     grid-column: 1 / -1;
   }
 
+  /* Stats overview & trend */
+  .app-stats-overview {
+    padding: 12px !important;
+    gap: 12px !important;
+  }
+
+  .stats-overview-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  .stat-mini-card {
+    padding: 8px 10px !important;
+    gap: 8px !important;
+  }
+
+  .stat-mini-icon {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 15px !important;
+    border-radius: 6px !important;
+  }
+
+  .stat-mini-label {
+    font-size: 10px !important;
+  }
+
+  .stat-mini-val {
+    font-size: 15px !important;
+  }
+
+  .stat-mini-unit {
+    font-size: 10px !important;
+  }
+
+  .stat-mini-sub {
+    font-size: 9.5px !important;
+  }
+
+  .stats-trend-section {
+    padding-top: 10px !important;
+  }
+
+  .trend-header {
+    margin-bottom: 8px !important;
+  }
+
+  .trend-title {
+    font-size: 12px !important;
+  }
+
+  .trend-legend {
+    gap: 8px !important;
+    font-size: 10px !important;
+  }
+
+  .trend-bars-container {
+    gap: 4px !important;
+    height: 75px !important;
+  }
+
+  .trend-date {
+    font-size: 9.5px !important;
+  }
+
+  /* Collapse & Group title */
+  :deep(.version-collapse .el-collapse-item__header) {
+    padding: 12px 10px !important;
+    height: auto !important;
+    line-height: 1.4 !important;
+  }
+
+  :deep(.version-collapse .el-collapse-item__content) {
+    padding: 10px 8px 4px 8px !important;
+  }
+
   .group-title {
-    padding-right: 4px;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+    width: 100% !important;
+    padding-right: 8px !important;
+  }
+
+  .group-title-main {
+    font-size: 14px;
+    gap: 4px;
+  }
+
+  .group-stats {
+    gap: 4px !important;
+    flex-wrap: wrap !important;
+  }
+
+  .group-stats :deep(.el-tag) {
+    font-size: 11px !important;
+    padding: 0 5px !important;
+    height: 20px !important;
+    line-height: 18px !important;
+  }
+
+  .date {
+    font-size: 11px !important;
+  }
+
+  .sub-card {
+    padding: 10px 10px;
+    margin-bottom: 10px;
+    border-radius: 8px;
   }
 
   .version-toolbar {
     flex-direction: column;
     align-items: stretch;
+    gap: 10px;
   }
 
   .version-controls {
     flex-direction: column;
     align-items: stretch;
     width: 100%;
-    gap: 12px;
+    gap: 10px;
   }
 
   .ctrl-item {
-    width: 100%;
-    justify-content: space-between;
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    font-size: 13px !important;
   }
 
   .del-ver-btn {
@@ -1913,14 +2050,83 @@ onUnmounted(() => {
     margin-top: 4px;
   }
 
-  :deep(.full-info .el-descriptions__label) {
-    width: 95px !important;
-    max-width: 95px !important;
-    font-size: 12px;
+  /* Meta grid: convert from 2-column to 1-column responsive layout on mobile */
+  .meta-grid {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
   }
 
-  :deep(.full-info .el-descriptions__content) {
-    font-size: 12px;
+  .meta-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 3px !important;
+  }
+
+  .meta-label {
+    width: auto !important;
+    font-size: 12px !important;
+    color: var(--app-text-muted) !important;
+    font-weight: 500 !important;
+  }
+
+  .meta-val {
+    width: 100% !important;
+    font-size: 13px !important;
+  }
+
+  .sha {
+    font-size: 11px !important;
+    padding: 4px 8px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .dl-link {
+    font-size: 11.5px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .mobile-radio-group {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+  }
+
+  .mobile-radio-group :deep(.el-radio-button) {
+    width: 100% !important;
+  }
+
+  .mobile-radio-group :deep(.el-radio-button__inner) {
+    width: 100% !important;
+    border-radius: 6px !important;
+    margin-bottom: 4px !important;
+    border-left: 1px solid var(--el-border-color) !important;
+  }
+
+  :deep(.patch-section .el-table) {
+    font-size: 12px !important;
+  }
+
+  .action-btn {
+    height: 26px !important;
+    padding: 0 7px !important;
+    font-size: 11.5px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .btn-text-full {
+    display: none;
+  }
+
+  .btn-text-short {
+    display: inline;
+  }
+
+  .toolbar-actions .el-button {
+    font-size: 12px !important;
+    padding: 0 4px !important;
   }
 }
 </style>

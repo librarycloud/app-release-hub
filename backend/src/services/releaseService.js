@@ -18,6 +18,7 @@ import {
 } from "./storageAdapter.js";
 import { checkBsdiffAvailable, computeFileSha256, generatePatch } from "./patchService.js";
 import { getFileExt, findMetadataAsset, findBinaryAsset } from "./assetResolver.js";
+import { cleanGithubRepo } from "./appRegistryService.js";
 
 const metadataTimeoutMs = 30_000;
 const fileTimeoutMs = 180_000;
@@ -92,7 +93,8 @@ function buildHeaders(token) {
  * Attempt to download a historical version's binary from GitHub releases list.
  */
 async function tryFetchHistoricalFile(appId, versionCode, destPath, { base, repo, headers, platform = "android", assetPattern = "" }) {
-  const listRes = await fetchWithTimeout(`${base}/repos/${repo}/releases?per_page=30`, { headers }, metadataTimeoutMs);
+  const cleanRepo = cleanGithubRepo(repo);
+  const listRes = await fetchWithTimeout(`${base}/repos/${cleanRepo}/releases?per_page=30`, { headers }, metadataTimeoutMs);
   if (!listRes.ok) return false;
   const releases = await listRes.json();
   for (const rel of releases) {
@@ -238,14 +240,35 @@ export async function generateAllMissingPatchesForVersion(appId, targetVersionCo
  */
 export async function syncLatestRelease(appId, { githubRepo, githubApiUrl = "https://api.github.com", token = "", platform = "android", assetPattern = "" }) {
   if (!githubRepo) throw new Error("githubRepo 未配置");
+  const cleanRepo = cleanGithubRepo(githubRepo);
   const defaultExt = getFileExt(platform);
   const base = String(githubApiUrl).replace(/\/$/, "");
   const headers = buildHeaders(token);
-  const githubContext = { base, repo: githubRepo, headers, platform, assetPattern };
+  const githubContext = { base, repo: cleanRepo, headers, platform, assetPattern };
 
-  const releaseRes = await fetchWithTimeout(`${base}/repos/${githubRepo}/releases/latest`, { headers }, metadataTimeoutMs);
-  if (!releaseRes.ok) throw new Error(`GitHub API 请求失败: ${releaseRes.status}`);
-  const release = await releaseRes.json();
+  const releaseRes = await fetchWithTimeout(`${base}/repos/${cleanRepo}/releases/latest`, { headers }, metadataTimeoutMs);
+  let release;
+  if (releaseRes.status === 404) {
+    // If /releases/latest returns 404, check /releases to see if only pre-releases exist or repo has 0 releases
+    const listRes = await fetchWithTimeout(`${base}/repos/${cleanRepo}/releases?per_page=1`, { headers }, metadataTimeoutMs);
+    if (!listRes.ok) {
+      if (listRes.status === 404) {
+        throw new Error(
+          `GitHub 仓库 "${cleanRepo}" 访问失败 (HTTP 404)。请检查：1. 仓库名称是否正确（格式应为 owner/repo）；2. 若为私有仓库，请在 .env 中配置 GITHUB_TOKEN (需勾选 repo 读取权限)`
+        );
+      }
+      throw new Error(`GitHub API 请求失败: HTTP ${listRes.status}`);
+    }
+    const list = await listRes.json();
+    if (!Array.isArray(list) || list.length === 0) {
+      throw new Error(`GitHub 仓库 "${cleanRepo}" 中尚未发布任何 Release (HTTP 404)。请先在 GitHub 仓库 Releases 页面发布一个版本`);
+    }
+    release = list[0];
+  } else if (!releaseRes.ok) {
+    throw new Error(`GitHub API 请求失败: HTTP ${releaseRes.status}`);
+  } else {
+    release = await releaseRes.json();
+  }
 
   const assets = release.assets || [];
   const metaAsset = findMetadataAsset(assets, platform);
@@ -468,21 +491,29 @@ export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePa
   const appRow = getApp(appId);
   if (!appRow) throw new Error(`App "${appId}" 不存在`);
   if (!appRow.github_repo) throw new Error("githubRepo 未配置");
+  const cleanRepo = cleanGithubRepo(appRow.github_repo);
 
   const token = config.resolveGithubToken(appId);
   const platform = appRow.platform || "android";
   const defaultExt = getFileExt(platform);
   const base = String(appRow.github_api_url || "https://api.github.com").replace(/\/$/, "");
   const headers = buildHeaders(token);
-  const githubContext = { base, repo: appRow.github_repo, headers, platform, assetPattern: appRow.asset_pattern || "" };
+  const githubContext = { base, repo: cleanRepo, headers, platform, assetPattern: appRow.asset_pattern || "" };
 
   const perPage = Math.min(Math.max(Number(limit) || 20, 1), 100);
   const releasesRes = await fetchWithTimeout(
-    `${base}/repos/${appRow.github_repo}/releases?per_page=${perPage}`,
+    `${base}/repos/${cleanRepo}/releases?per_page=${perPage}`,
     { headers },
     metadataTimeoutMs
   );
-  if (!releasesRes.ok) throw new Error(`GitHub API 请求失败: HTTP ${releasesRes.status}`);
+  if (!releasesRes.ok) {
+    if (releasesRes.status === 404) {
+      throw new Error(
+        `GitHub 仓库 "${cleanRepo}" 访问失败 (HTTP 404)。请检查：1. 仓库名称是否正确（格式应为 owner/repo）；2. 若为私有仓库，请在 .env 中配置 GITHUB_TOKEN (需勾选 repo 读取权限)`
+      );
+    }
+    throw new Error(`GitHub API 请求失败: HTTP ${releasesRes.status}`);
+  }
   const releases = await releasesRes.json();
   if (!Array.isArray(releases)) throw new Error("GitHub 返回的 Release 列表无效");
 

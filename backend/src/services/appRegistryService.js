@@ -10,6 +10,16 @@ export function getAppById(appId) {
   return formatApp(row);
 }
 
+export function cleanGithubRepo(input) {
+  if (!input) return "";
+  let repo = String(input).trim();
+  repo = repo.replace(/^https?:\/\/github\.com\//i, "");
+  repo = repo.replace(/^github\.com\//i, "");
+  repo = repo.replace(/\.git$/i, "");
+  repo = repo.replace(/\/+$/, "");
+  return repo;
+}
+
 export function registerApp({ appId, name, platform = "android", githubRepo = "", githubApiUrl = "https://api.github.com", autoSync = false, assetPattern = "" }) {
   if (!appId || !/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(appId)) {
     throw new Error("appId 只能包含小写字母、数字和连字符，且不能以连字符开头或结尾");
@@ -18,7 +28,7 @@ export function registerApp({ appId, name, platform = "android", githubRepo = ""
     throw new Error(`App "${appId}" 已存在`);
   }
   if (!name) throw new Error("name 不能为空");
-  insertApp({ appId, name, platform, githubRepo, githubApiUrl, autoSync, assetPattern });
+  insertApp({ appId, name, platform, githubRepo: cleanGithubRepo(githubRepo), githubApiUrl, autoSync, assetPattern });
   return getAppById(appId);
 }
 
@@ -27,7 +37,7 @@ export function updateAppConfig(appId, fields) {
   const mapped = {};
   if (fields.name !== undefined) mapped.name = fields.name;
   if (fields.platform !== undefined) mapped.platform = fields.platform;
-  if (fields.githubRepo !== undefined) mapped.github_repo = fields.githubRepo;
+  if (fields.githubRepo !== undefined) mapped.github_repo = cleanGithubRepo(fields.githubRepo);
   if (fields.githubApiUrl !== undefined) mapped.github_api_url = fields.githubApiUrl;
   if (fields.autoSync !== undefined) mapped.auto_sync = fields.autoSync;
   if (fields.assetPattern !== undefined) mapped.asset_pattern = fields.assetPattern;

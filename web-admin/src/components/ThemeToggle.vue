@@ -1,18 +1,17 @@
 <template>
-  <el-dropdown trigger="click" @command="handleCommand">
-    <el-tooltip :content="tooltipText" placement="bottom" :show-after="400">
-      <el-button
-        class="theme-toggle-btn"
-        circle
-        :class="{ 'is-dark': isDark, 'is-system': themeMode === 'system' }"
-      >
-        <el-icon :size="16" class="theme-icon">
-          <Monitor v-if="themeMode === 'system'" />
-          <Moon v-else-if="themeMode === 'dark'" />
-          <Sunny v-else />
-        </el-icon>
-      </el-button>
-    </el-tooltip>
+  <el-dropdown trigger="click" placement="bottom-end" @command="handleCommand">
+    <el-button
+      class="theme-toggle-btn"
+      circle
+      :class="{ 'is-dark': isDark, 'is-system': themeMode === 'system' }"
+      :title="tooltipText"
+    >
+      <el-icon :size="16" class="theme-icon">
+        <Monitor v-if="themeMode === 'system'" />
+        <Moon v-else-if="themeMode === 'dark'" />
+        <Sunny v-else />
+      </el-icon>
+    </el-button>
     <template #dropdown>
       <el-dropdown-menu class="theme-dropdown-menu">
         <el-dropdown-item command="light" :class="{ 'is-active': themeMode === 'light' }">
@@ -45,6 +44,7 @@
 <script setup>
 import { computed } from "vue";
 import { Sunny, Moon, Monitor, Check } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import { useTheme } from "../utils/useTheme.js";
 
 const { themeMode, isDark, systemPrefersDark, setTheme } = useTheme();
@@ -58,6 +58,15 @@ const tooltipText = computed(() => {
 
 function handleCommand(mode) {
   setTheme(mode);
+  const labels = {
+    light: "已切换为：浅色模式",
+    dark: "已切换为：暗色模式",
+    system: `已切换为：跟随系统 (${systemPrefersDark.value ? "深色" : "浅色"})`,
+  };
+  ElMessage.success({
+    message: labels[mode] || "主题已更新",
+    duration: 1500,
+  });
 }
 </script>
 

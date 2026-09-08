@@ -1,4 +1,4 @@
-import { createReadStream } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
 import { stat, mkdir, rm } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
@@ -10,7 +10,7 @@ import {
   getAllApps, getAppById, registerApp, updateAppConfig, removeApp
 } from "../services/appRegistryService.js";
 import {
-  syncLatestRelease, generatePatchBetweenVersions, generateAllMissingPatchesForVersion, deleteReleaseVersion, createManualVersion
+  syncLatestRelease, syncHistoricalReleases, generatePatchBetweenVersions, generateAllMissingPatchesForVersion, deleteReleaseVersion, createManualVersion
 } from "../services/releaseService.js";
 import { getVersionForClient, getPatchMatrix, updateVersionConfig } from "../services/versionService.js";
 import { getDownloadUrl, getFileMeta, saveFile } from "../services/storageProvider.js";
@@ -276,7 +276,12 @@ export async function deleteVersionController(request, reply) {
 }
 
 export async function syncHistoryReleasesController(request, reply) {
-  return reply.code(400).send({ code: 400, message: "不再支持批量导入，请使用手动补录或等待自动同步。" });
+  const { appId } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+  const { limit = 20, autoGeneratePatches = false } = request.body || {};
+  const result = await syncHistoricalReleases(appId, { limit, autoGeneratePatches });
+  return ok(reply, result, `已同步历史版本 (导入 ${result.importedCount} 个，跳过 ${result.skippedCount} 个)`);
 }
 
 export async function createVersionController(request, reply) {

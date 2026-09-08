@@ -272,11 +272,11 @@ export async function syncReleaseController(request, reply) {
   const token = config.resolveGithubToken(appId);
   try {
     const result = await syncLatestRelease(appId, {
-      githubRepo: app.github_repo,
-      githubApiUrl: app.github_api_url,
+      githubRepo: app.githubRepo,
+      githubApiUrl: app.githubApiUrl,
       token,
       platform: app.platform,
-      assetPattern: app.asset_pattern,
+      assetPattern: app.assetPattern,
     });
     recordSyncResult(appId);
     return ok(reply, result, "Release 已同步");

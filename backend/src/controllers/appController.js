@@ -32,9 +32,9 @@ async function requireApp(appId, reply) {
 }
 
 function validateClientToken(app, request) {
-  if (!app.is_private) return true;
+  if (!app.isPrivate) return true;
   const token = request.headers["x-client-token"] || request.query.token;
-  return token === app.client_token;
+  return token && token === app.clientToken;
 }
 
 // ─── Public ──────────────────────────────────────────────────────────────────
@@ -68,7 +68,7 @@ async function serveFileWithRange(request, reply, appId, subDir, filename, recor
   try { recordStatFn(appId, filename); } catch {}
 
   if (config.storageType === "s3") {
-    const url = await getDownloadUrl(appId, subDir, filename, app.is_private);
+    const url = await getDownloadUrl(appId, subDir, filename, app.isPrivate);
     return reply.redirect(302, url);
   }
 

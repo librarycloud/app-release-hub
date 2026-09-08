@@ -30,6 +30,11 @@ export function registerApp({
   autoSyncIntervalMinutes = 60,
   assetPattern = "",
   patchReadinessPolicy = "hide_download_link",
+  isPrivate = false,
+  clientToken = "",
+  maxRetainedVersions = 0,
+  webhookUrl = "",
+  webhookType = "generic",
 }) {
   if (!appId || !/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(appId)) {
     throw new Error("appId 只能包含小写字母、数字和连字符，且不能以连字符开头或结尾");
@@ -48,6 +53,11 @@ export function registerApp({
     autoSyncIntervalMinutes,
     assetPattern,
     patchReadinessPolicy,
+    isPrivate,
+    clientToken,
+    maxRetainedVersions,
+    webhookUrl,
+    webhookType,
   });
   return getAppById(appId);
 }
@@ -69,6 +79,14 @@ export function updateAppConfig(appId, fields) {
       ? fields.patchReadinessPolicy
       : "hide_download_link";
   }
+  if (fields.isPrivate !== undefined) mapped.is_private = Boolean(fields.isPrivate);
+  if (fields.clientToken !== undefined) mapped.client_token = String(fields.clientToken || "");
+  if (fields.maxRetainedVersions !== undefined) mapped.max_retained_versions = Math.max(0, Number(fields.maxRetainedVersions) || 0);
+  if (fields.webhookUrl !== undefined) mapped.webhook_url = String(fields.webhookUrl || "");
+  if (fields.webhookType !== undefined) {
+    const validTypes = ["generic", "feishu", "dingtalk", "wecom"];
+    mapped.webhook_type = validTypes.includes(fields.webhookType) ? fields.webhookType : "generic";
+  }
   updateApp(appId, mapped);
   return getAppById(appId);
 }
@@ -89,6 +107,11 @@ function formatApp(row) {
     autoSyncIntervalMinutes: Number(row.auto_sync_interval_minutes || 60),
     assetPattern: row.asset_pattern || "",
     patchReadinessPolicy: row.patch_readiness_policy || "hide_download_link",
+    isPrivate: row.is_private === 1,
+    clientToken: row.client_token || "",
+    maxRetainedVersions: Number(row.max_retained_versions || 0),
+    webhookUrl: row.webhook_url || "",
+    webhookType: row.webhook_type || "generic",
     checkCount: Number(row.check_count || 0),
     downloadCount: Number(row.download_count || 0),
     lastSyncedAt: row.last_synced_at || null,

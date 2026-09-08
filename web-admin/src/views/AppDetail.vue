@@ -151,13 +151,81 @@
         </div>
       </el-empty>
 
-      <!-- Version groups -->
-      <el-collapse v-model="openGroups" accordion class="version-collapse">
-        <el-collapse-item
-          v-for="group in versionGroups"
-          :key="group.versionCode"
-          :name="String(group.versionCode)"
-        >
+      <!-- Version Branch Section Toolbar -->
+      <div class="version-section-bar" v-if="versionGroups.length > 0">
+        <div class="v-section-bar-left">
+          <div class="branch-filter-tabs">
+            <span class="branch-filter-label">分支过滤:</span>
+            <button
+              type="button"
+              :class="['branch-pill-btn', { active: selectedBranchFilter === 'all' }]"
+              @click="selectBranch('all')"
+            >
+              全部 ({{ versionGroups.length }})
+            </button>
+            <button
+              v-for="b in allBranches"
+              :key="b.branchKey"
+              type="button"
+              :class="['branch-pill-btn', { active: selectedBranchFilter === b.branchKey }]"
+              @click="selectBranch(b.branchKey)"
+            >
+              {{ b.displayName }} ({{ b.versions.length }})
+              <span v-if="b.hasLatest" class="pill-dot" title="当前最新主干"></span>
+            </button>
+          </div>
+        </div>
+        <div class="v-section-bar-right">
+          <el-button-group size="small">
+            <el-button @click="expandAllBranches">全部展开</el-button>
+            <el-button @click="collapseAllBranches">全部折叠</el-button>
+          </el-button-group>
+        </div>
+      </div>
+
+      <!-- Version Groups nested inside Collapsible Branches -->
+      <div class="branch-card" v-for="branch in displayBranches" :key="branch.branchKey">
+        <div class="branch-header" @click="toggleBranch(branch.branchKey)">
+          <div class="branch-header-left">
+            <span class="branch-arrow" :class="{ 'is-open': openBranches.includes(branch.branchKey) }">
+              ▶
+            </span>
+            <span class="branch-folder-icon">📁</span>
+            <span class="branch-name">{{ branch.displayName }} 系列</span>
+            <el-tag v-if="branch.hasLatest" type="success" size="small" effect="dark">
+              当前主干 (最新)
+            </el-tag>
+            <el-tag type="info" size="small" round>
+              {{ branch.versions.length }} 个版本
+            </el-tag>
+            <span class="branch-version-range" v-if="branch.versions.length > 1">
+              v{{ branch.minVersionName }} ~ v{{ branch.maxVersionName }}
+            </span>
+          </div>
+          <div class="branch-header-right" @click.stop>
+            <span class="branch-downloads">
+              📥 累计下载 <strong>{{ branch.totalDownloads }}</strong> 次
+            </span>
+            <el-button
+              size="small"
+              text
+              type="primary"
+              class="branch-toggle-btn"
+              @click="toggleBranch(branch.branchKey)"
+            >
+              {{ openBranches.includes(branch.branchKey) ? '折叠 ▴' : '展开 ▾' }}
+            </el-button>
+          </div>
+        </div>
+
+        <el-collapse-transition>
+          <div v-show="openBranches.includes(branch.branchKey)" class="branch-body">
+            <el-collapse v-model="branchActiveVersion[branch.branchKey]" accordion class="version-collapse">
+              <el-collapse-item
+                v-for="group in branch.versions"
+                :key="group.versionCode"
+                :name="String(group.versionCode)"
+              >
           <template #title>
             <div class="group-title">
               <div class="group-title-main">
@@ -195,13 +263,26 @@
               </div>
               <div class="ctrl-item">
                 <span class="ctrl-label">最低兼容版本:</span>
-                <el-input-number
+                <el-select
                   v-model="group.minVersionCode"
-                  :min="1"
-                  :max="group.versionCode"
                   size="small"
-                  style="width:110px"
-                />
+                  class="min-ver-select"
+                  placeholder="选择兼容版本"
+                  :loading="updatingVersion[group.versionCode]"
+                >
+                  <el-option :value="1" label="不限 (兼容所有旧版本)" />
+                  <el-option
+                    v-if="isCustomMinVersion(group)"
+                    :value="group.minVersionCode"
+                    :label="`代码: ${group.minVersionCode} (历史指定)`"
+                  />
+                  <el-option
+                    v-for="v in getEligibleMinVersions(group.versionCode)"
+                    :key="v.versionCode"
+                    :value="v.versionCode"
+                    :label="`≥ v${v.versionName} (代码: ${v.versionCode})`"
+                  />
+                </el-select>
                 <el-button
                   size="small"
                   type="primary"
@@ -211,7 +292,7 @@
                 >
                   保存
                 </el-button>
-                <el-tooltip content="低于此 versionCode 的旧客户端请求此更新时将被标记为强制更新" placement="top">
+                <el-tooltip content="低于此版本的旧客户端请求此更新时将被标记为强制更新" placement="top">
                   <span class="help-icon">ℹ️</span>
                 </el-tooltip>
               </div>
@@ -257,7 +338,7 @@
               <div class="meta-row">
                 <span class="meta-label">最低兼容版本</span>
                 <span class="meta-val">
-                  <code class="meta-vc-code">vc &ge; {{ group.minVersionCode || 1 }}</code>
+                  <code class="meta-vc-code">{{ formatMinVersionDisplay(group.minVersionCode) }}</code>
                 </span>
               </div>
               <div class="meta-row">
@@ -408,7 +489,10 @@
             </div>
           </div>
         </el-collapse-item>
-      </el-collapse>
+            </el-collapse>
+          </div>
+        </el-collapse-transition>
+      </div>
     </div>
 
     <!-- Edit Release Notes Dialog -->
@@ -583,12 +667,19 @@
           </el-col>
           <el-col :xs="24" :sm="12">
             <el-form-item label="最低兼容版本">
-              <el-input-number
+              <el-select
                 v-model="manualForm.minVersionCode"
-                :min="1"
-                placeholder="默认 1"
+                placeholder="选择最低兼容版本（默认不限）"
                 style="width:100%"
-              />
+              >
+                <el-option :value="1" label="不限 (兼容所有旧版本)" />
+                <el-option
+                  v-for="v in versionGroups"
+                  :key="v.versionCode"
+                  :value="v.versionCode"
+                  :label="`≥ v${v.versionName} (代码: ${v.versionCode})`"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
@@ -731,6 +822,82 @@ const syncing = ref(false);
 const versionGroups = ref([]);
 const bsdiffAvailable = ref(true);
 const openGroups = ref([]);
+const selectedBranchFilter = ref("all");
+const openBranches = ref([]);
+const branchActiveVersion = ref({});
+
+function extractBranchKey(versionName) {
+  if (!versionName) return "其他";
+  const str = String(versionName).trim();
+  const matchTwo = str.match(/(?:^|[^\d])(\d+)\.(\d+)/);
+  if (matchTwo) {
+    return `${matchTwo[1]}.${matchTwo[2]}`;
+  }
+  const matchOne = str.match(/(?:^|[^\d])(\d+)(?:[^\d]|$)/);
+  if (matchOne) {
+    return `${matchOne[1]}.0`;
+  }
+  return "其他";
+}
+
+const allBranches = computed(() => {
+  const map = new Map();
+  for (const group of versionGroups.value) {
+    const key = extractBranchKey(group.versionName);
+    if (!map.has(key)) {
+      map.set(key, {
+        branchKey: key,
+        displayName: key === "其他" ? "其他版本" : `v${key}.x`,
+        hasLatest: false,
+        totalDownloads: 0,
+        versions: [],
+      });
+    }
+    const b = map.get(key);
+    b.versions.push(group);
+    if (group.isLatest) b.hasLatest = true;
+    b.totalDownloads += Number(group.downloadCount || 0);
+  }
+  return Array.from(map.values()).map((b) => {
+    return {
+      ...b,
+      minVersionName: b.versions[b.versions.length - 1]?.versionName || "",
+      maxVersionName: b.versions[0]?.versionName || "",
+    };
+  });
+});
+
+const displayBranches = computed(() => {
+  if (selectedBranchFilter.value === "all") {
+    return allBranches.value;
+  }
+  return allBranches.value.filter((b) => b.branchKey === selectedBranchFilter.value);
+});
+
+function toggleBranch(branchKey) {
+  const idx = openBranches.value.indexOf(branchKey);
+  if (idx > -1) {
+    openBranches.value.splice(idx, 1);
+  } else {
+    openBranches.value.push(branchKey);
+  }
+}
+
+function selectBranch(key) {
+  selectedBranchFilter.value = key;
+  if (key !== "all" && !openBranches.value.includes(key)) {
+    openBranches.value.push(key);
+  }
+}
+
+function expandAllBranches() {
+  openBranches.value = allBranches.value.map((b) => b.branchKey);
+}
+
+function collapseAllBranches() {
+  openBranches.value = [];
+}
+
 const generatingAll = ref({});
 const updatingVersion = ref({});
 const deletingVersion = ref({});
@@ -866,9 +1033,13 @@ async function load() {
     appInfo.value = (appsRes.data || []).find((a) => a.appId === appId) || null;
     appStats.value = statsRes?.data || null;
 
-    // Auto-open the latest version group
-    if (versionGroups.value.length > 0 && openGroups.value.length === 0) {
-      openGroups.value = [String(versionGroups.value[0].versionCode)];
+    // Auto-open the latest branch and its latest version if not set
+    if (allBranches.value.length > 0 && openBranches.value.length === 0) {
+      const mainBranch = allBranches.value.find((b) => b.hasLatest) || allBranches.value[0];
+      openBranches.value = [mainBranch.branchKey];
+      if (mainBranch.versions.length > 0) {
+        branchActiveVersion.value[mainBranch.branchKey] = String(mainBranch.versions[0].versionCode);
+      }
     }
   } catch (e) { ElMessage.error(e?.message || "加载失败"); }
   finally { loading.value = false; }
@@ -908,12 +1079,36 @@ async function handleToggleForceUpdate(group, val) {
   }
 }
 
+function getEligibleMinVersions(targetVersionCode) {
+  return (versionGroups.value || [])
+    .filter((v) => Number(v.versionCode) <= Number(targetVersionCode))
+    .sort((a, b) => Number(b.versionCode) - Number(a.versionCode));
+}
+
+function isCustomMinVersion(group) {
+  const code = Number(group.minVersionCode);
+  if (!code || code <= 1) return false;
+  const eligible = getEligibleMinVersions(group.versionCode);
+  return !eligible.some((v) => Number(v.versionCode) === code);
+}
+
+function formatMinVersionDisplay(code) {
+  const c = Number(code) || 1;
+  if (c <= 1) return "不限 (兼容所有旧版本)";
+  const found = (versionGroups.value || []).find((v) => Number(v.versionCode) === c);
+  if (found) {
+    return `≥ v${found.versionName} (代码: ${c})`;
+  }
+  return `≥ 代码: ${c}`;
+}
+
 async function handleSaveMinVersionCode(group) {
   const vCode = group.versionCode;
   updatingVersion.value[vCode] = true;
   try {
     await updateVersion(appId, vCode, { minVersionCode: group.minVersionCode });
-    ElMessage.success(`v${group.versionName} 最低兼容版本已设为 ${group.minVersionCode}`);
+    const label = formatMinVersionDisplay(group.minVersionCode);
+    ElMessage.success(`v${group.versionName} 最低兼容版本已设为: ${label}`);
   } catch (e) {
     ElMessage.error(e?.message || "保存失败");
   } finally {
@@ -942,7 +1137,7 @@ async function handleDeleteVersion(group) {
   try {
     await deleteVersion(appId, vCode);
     ElMessage.success(`版本 v${group.versionName} (vc: ${vCode}) 已成功删除`);
-    openGroups.value = [];
+    branchActiveVersion.value = {};
     await load();
   } catch (e) {
     ElMessage.error(e?.message || "删除版本失败");
@@ -1365,6 +1560,176 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+/* Version Section Bar (Branch Pills & Expand/Collapse) */
+.version-section-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  background: var(--app-surface-subtle);
+  border: 1px solid var(--app-card-border);
+  border-radius: 10px;
+}
+
+.v-section-bar-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.branch-filter-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-text-muted);
+  margin-right: 4px;
+}
+
+.branch-filter-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.branch-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 20px;
+  border: 1px solid var(--app-card-border);
+  background: var(--app-card-bg);
+  color: var(--app-text-main);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.branch-pill-btn:hover {
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.branch-pill-btn.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+.pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.branch-pill-btn.active .pill-dot {
+  background: #ffffff;
+}
+
+/* Branch Card */
+.branch-card {
+  margin-bottom: 14px;
+  border: 1px solid var(--app-card-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--app-card-bg);
+  box-shadow: var(--app-card-shadow);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.branch-card:hover {
+  border-color: #93c5fd;
+}
+
+[data-theme="dark"] .branch-card:hover {
+  border-color: #1e3a8a;
+}
+
+.branch-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--app-surface-subtle);
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid transparent;
+  transition: background 0.2s ease;
+}
+
+.branch-header:hover {
+  background: var(--app-card-border);
+}
+
+.branch-card.is-open .branch-header {
+  border-bottom: 1px solid var(--app-card-border);
+}
+
+.branch-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.branch-arrow {
+  font-size: 11px;
+  color: var(--app-text-muted);
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+
+.branch-arrow.is-open {
+  transform: rotate(90deg);
+}
+
+.branch-folder-icon {
+  font-size: 16px;
+}
+
+.branch-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--app-text-main);
+}
+
+.branch-version-range {
+  font-size: 12px;
+  color: var(--app-text-muted);
+  font-family: monospace;
+}
+
+.branch-header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.branch-downloads {
+  font-size: 12px;
+  color: var(--app-text-muted);
+}
+
+.branch-downloads strong {
+  color: var(--app-text-main);
+}
+
+.branch-body {
+  padding: 10px 12px 12px 12px;
+  background: var(--app-card-bg);
+}
+
+.branch-body .version-collapse {
+  border-radius: 8px;
+  box-shadow: none;
+}
+
 /* Version Collapse Container - Connected single card */
 .version-collapse {
   border: 1px solid var(--app-card-border) !important;
@@ -1516,6 +1881,11 @@ onUnmounted(() => {
   gap: 8px;
   font-size: 14px;
   flex-wrap: wrap;
+}
+
+.min-ver-select {
+  width: 230px;
+  max-width: 100%;
 }
 
 .ctrl-label {
@@ -2044,6 +2414,23 @@ onUnmounted(() => {
     padding: 10px 8px 4px 8px !important;
   }
 
+  .version-section-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  .branch-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+
+  .branch-header-right {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+
   .group-title {
     flex-direction: column !important;
     align-items: flex-start !important;
@@ -2100,6 +2487,10 @@ onUnmounted(() => {
     flex-wrap: wrap !important;
     gap: 6px !important;
     font-size: 13px !important;
+  }
+
+  .min-ver-select {
+    width: 100% !important;
   }
 
   .del-ver-btn {

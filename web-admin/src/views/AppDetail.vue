@@ -220,11 +220,17 @@
 
         <el-collapse-transition>
           <div v-show="openBranches.includes(branch.branchKey)" class="branch-body">
-            <el-collapse v-model="branchActiveVersion[branch.branchKey]" accordion class="version-collapse">
+            <el-collapse
+              v-model="branchActiveVersion[branch.branchKey]"
+              accordion
+              class="version-collapse"
+              @change="(val) => handleVersionCollapseChange(val)"
+            >
               <el-collapse-item
                 v-for="group in branch.versions"
                 :key="group.versionCode"
                 :name="String(group.versionCode)"
+                :id="`version-item-${group.versionCode}`"
               >
           <template #title>
             <div class="group-title">
@@ -896,6 +902,35 @@ function expandAllBranches() {
 
 function collapseAllBranches() {
   openBranches.value = [];
+}
+
+let scrollTimer = null;
+let secondaryScrollTimer = null;
+
+function handleVersionCollapseChange(activeCode) {
+  if (!activeCode) return;
+  scrollToVersion(activeCode);
+}
+
+function scrollToVersion(versionCode) {
+  if (!versionCode) return;
+  if (scrollTimer) clearTimeout(scrollTimer);
+  if (secondaryScrollTimer) clearTimeout(secondaryScrollTimer);
+
+  scrollTimer = setTimeout(() => {
+    const el = document.getElementById(`version-item-${versionCode}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 80);
+
+  secondaryScrollTimer = setTimeout(() => {
+    const el = document.getElementById(`version-item-${versionCode}`);
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.top < 10 || rect.top > 120) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, 320);
 }
 
 const generatingAll = ref({});
@@ -1747,6 +1782,7 @@ onUnmounted(() => {
   border-right: none;
   border-radius: 0 !important;
   box-shadow: none !important;
+  scroll-margin-top: 24px;
 }
 
 :deep(.version-collapse .el-collapse-item:last-child) {

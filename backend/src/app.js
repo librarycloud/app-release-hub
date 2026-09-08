@@ -39,10 +39,9 @@ fastify.addContentTypeParser("application/json", { parseAs: "string" }, (_req, b
 // CORS
 await fastify.register(cors, { origin: true });
 
-// Rate limiting — applied globally; protects public download endpoints from abuse
+// Rate limiting — configured per route in routes/*.js
 await fastify.register(rateLimit, {
-  max: 60,
-  timeWindow: "1 minute",
+  global: false,
   errorResponseBuilder: () => ({ code: 429, message: "请求过于频繁，请稍后再试" }),
 });
 

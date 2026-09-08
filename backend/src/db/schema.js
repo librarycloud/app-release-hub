@@ -16,6 +16,11 @@ export function initSchema() {
       check_count    INTEGER NOT NULL DEFAULT 0,
       download_count INTEGER NOT NULL DEFAULT 0,
       patch_readiness_policy TEXT NOT NULL DEFAULT 'hide_download_link',
+      is_private     INTEGER NOT NULL DEFAULT 0,
+      client_token   TEXT NOT NULL DEFAULT '',
+      max_retained_versions INTEGER NOT NULL DEFAULT 0,
+      webhook_url    TEXT NOT NULL DEFAULT '',
+      webhook_type   TEXT NOT NULL DEFAULT 'generic',
       created_at     TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -35,6 +40,8 @@ export function initSchema() {
       size             INTEGER NOT NULL DEFAULT 0,
       download_count   INTEGER NOT NULL DEFAULT 0,
       is_latest        INTEGER NOT NULL DEFAULT 0,
+      rollout_percentage INTEGER NOT NULL DEFAULT 100,
+      channel          TEXT NOT NULL DEFAULT 'stable',
       created_at       TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(app_id, version_code),
       FOREIGN KEY(app_id) REFERENCES apps(app_id) ON DELETE CASCADE
@@ -95,10 +102,31 @@ export function initSchema() {
   if (!columns.includes("patch_readiness_policy")) {
     db.exec("ALTER TABLE apps ADD COLUMN patch_readiness_policy TEXT NOT NULL DEFAULT 'hide_download_link'");
   }
+  if (!columns.includes("is_private")) {
+    db.exec("ALTER TABLE apps ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.includes("client_token")) {
+    db.exec("ALTER TABLE apps ADD COLUMN client_token TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columns.includes("max_retained_versions")) {
+    db.exec("ALTER TABLE apps ADD COLUMN max_retained_versions INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!columns.includes("webhook_url")) {
+    db.exec("ALTER TABLE apps ADD COLUMN webhook_url TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columns.includes("webhook_type")) {
+    db.exec("ALTER TABLE apps ADD COLUMN webhook_type TEXT NOT NULL DEFAULT 'generic'");
+  }
 
   const versionColumns = db.prepare("PRAGMA table_info(versions)").all().map((c) => c.name);
   if (!versionColumns.includes("download_count")) {
     db.exec("ALTER TABLE versions ADD COLUMN download_count INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!versionColumns.includes("rollout_percentage")) {
+    db.exec("ALTER TABLE versions ADD COLUMN rollout_percentage INTEGER NOT NULL DEFAULT 100");
+  }
+  if (!versionColumns.includes("channel")) {
+    db.exec("ALTER TABLE versions ADD COLUMN channel TEXT NOT NULL DEFAULT 'stable'");
   }
 
   const patchColumns = db.prepare("PRAGMA table_info(patches)").all().map((c) => c.name);

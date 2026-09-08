@@ -1,41 +1,26 @@
-import { createReadStream, createWriteStream } from "node:fs";
+import { createReadStream } from "node:fs";
 import { stat, mkdir, rm } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
 import { config } from "../config.js";
 import {
-  getApp,
-  recordSyncResult,
-  recordAppCheck,
-  recordReleaseDownload,
-  recordPatchDownload,
-  getAppStats,
-  getGlobalStats,
+  getApp, recordSyncResult, recordAppCheck, recordReleaseDownload, recordPatchDownload, getAppStats, getGlobalStats
 } from "../services/storageAdapter.js";
 import {
-  getAllApps,
-  getAppById,
-  registerApp,
-  updateAppConfig,
-  removeApp,
+  getAllApps, getAppById, registerApp, updateAppConfig, removeApp
 } from "../services/appRegistryService.js";
 import {
-  syncLatestRelease,
-  generatePatchBetweenVersions,
-  generateAllMissingPatchesForVersion,
-  deleteReleaseVersion,
-  syncHistoricalReleases,
-  createManualVersion,
+  syncLatestRelease, generatePatchBetweenVersions, generateAllMissingPatchesForVersion, deleteReleaseVersion, createManualVersion
 } from "../services/releaseService.js";
 import { getVersionForClient, getPatchMatrix, updateVersionConfig } from "../services/versionService.js";
+import { getDownloadUrl, getFileMeta, saveFile } from "../services/storageProvider.js";
+import { sendWebhookNotification } from "../services/notificationService.js";
 
 function ok(reply, data, message = "ok") {
   return reply.send({ code: 0, message, data });
 }
 
-function appFilesDir(appId) {
-  return path.resolve(config.filesDir, appId);
-}
+function appFilesDir(appId) { return path.resolve(config.filesDir, appId); }
 
 async function requireApp(appId, reply) {
   const app = getAppById(appId);
@@ -46,81 +31,167 @@ async function requireApp(appId, reply) {
   return app;
 }
 
+function validateClientToken(app, request) {
+  if (!app.is_private) return true;
+  const token = request.headers["x-client-token"] || request.query.token;
+  return token === app.client_token;
+}
+
 // ─── Public ──────────────────────────────────────────────────────────────────
 
 export async function clientVersionController(request, reply) {
   const { appId } = request.params;
   const app = await requireApp(appId, reply);
   if (!app) return;
-  try {
-    recordAppCheck(appId);
-  } catch {
-    // Non-blocking
+
+  if (!validateClientToken(app, request)) {
+    return reply.code(403).send({ code: 403, message: "无权访问此私有 App" });
   }
+
+  try { recordAppCheck(appId); } catch {}
   reply.header("Cache-Control", "no-store, no-cache, must-revalidate").header("Pragma", "no-cache");
   const currentVersionCode = request.query.versionCode || request.query.currentVersionCode;
   const policy = request.query.policy;
-  return ok(reply, await getVersionForClient(appId, { currentVersionCode, policy }));
+  const channel = request.query.channel || "stable";
+  const deviceId = request.query.deviceId || request.headers["x-device-id"] || "";
+  return ok(reply, await getVersionForClient(appId, { currentVersionCode, policy, channel, deviceId }));
+}
+
+async function serveFileWithRange(request, reply, appId, subDir, filename, recordStatFn) {
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+
+  if (!validateClientToken(app, request)) {
+    return reply.code(403).send({ code: 403, message: "无权下载此私有 App" });
+  }
+
+  try { recordStatFn(appId, filename); } catch {}
+
+  if (config.storageType === "s3") {
+    const url = await getDownloadUrl(appId, subDir, filename, app.is_private);
+    return reply.redirect(302, url);
+  }
+
+  if (config.enableNginxAccel) {
+    return reply
+      .header("X-Accel-Redirect", `${config.nginxInternalPathPrefix}/${appId}/${subDir}/${filename}`)
+      .send();
+  }
+
+  const { exists, size, path: filePath } = await getFileMeta(appId, subDir, filename);
+  if (!exists) return reply.code(404).send({ code: 404, message: "文件不存在" });
+
+  reply.header("Accept-Ranges", "bytes");
+  reply.header("Content-Disposition", `attachment; filename="${filename}"`);
+
+  const range = request.headers.range;
+  if (range) {
+    const parts = range.replace(/bytes=/, "").split("-");
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : size - 1;
+    if (start >= size || end >= size) {
+      return reply.code(416).header("Content-Range", `bytes */${size}`).send();
+    }
+    reply
+      .code(206)
+      .header("Content-Range", `bytes ${start}-${end}/${size}`)
+      .header("Content-Length", end - start + 1);
+    return reply.send(createReadStream(filePath, { start, end }));
+  }
+
+  reply.header("Content-Length", size);
+  return reply.send(createReadStream(filePath));
 }
 
 export async function serveReleaseController(request, reply) {
-  const { appId, filename } = request.params;
-  if (!/^[A-Za-z0-9._-]+\.(apk|aab|bin|exe|msi|dmg|pkg|appimage|deb|rpm|ipa|zip|tar\.gz)$/i.test(filename)) {
-    return reply.code(404).send({ code: 404, message: "文件不存在" });
+  return serveFileWithRange(request, reply, request.params.appId, "releases", request.params.filename, recordReleaseDownload);
+}
+
+
+export async function electronUpdateController(request, reply) {
+  const { appId, currentVersion } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+
+  const channel = request.query.channel || "stable";
+  const result = await getVersionForClient(appId, { currentVersionCode: currentVersion, policy: "fallback_full", channel });
+  
+  if (!result || !result.hasUpdate) {
+    return reply.code(204).send(); // 204 No Content for Electron autoUpdater when no update
   }
-  if (!getApp(appId)) return reply.code(404).send({ code: 404, message: "App 不存在" });
-  const filePath = path.join(appFilesDir(appId), "releases", filename);
-  try {
-    const s = await stat(filePath);
-    if (!s.isFile()) return reply.code(404).send({ code: 404, message: "文件不存在" });
-  } catch {
-    return reply.code(404).send({ code: 404, message: "文件不存在" });
+
+  // Construct absolute URL
+  const baseUrl = (config.downloadBaseUrl || `${request.protocol}://${request.hostname}`).replace(/\/+$/, "");
+  const downloadUrl = `${baseUrl}${result.downloadUrl}`;
+
+  return reply.send({
+    name: result.versionName || result.versionCode,
+    notes: Array.isArray(result.releaseNotes) ? result.releaseNotes.join("\n") : result.releaseNotes,
+    pub_date: result.publishedAt ? new Date(result.publishedAt).toISOString() : new Date().toISOString(),
+    url: downloadUrl
+  });
+}
+
+export async function iosManifestController(request, reply) {
+  const { appId } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+
+  const result = await getVersionForClient(appId, { policy: "fallback_full" });
+  if (!result || !result.downloadUrl) {
+    return reply.code(404).send("No iOS version available");
   }
-  try {
-    recordReleaseDownload(appId, filename);
-  } catch {
-    // Non-blocking
-  }
-  reply
-    .header("Cache-Control", "no-store, no-cache, must-revalidate")
-    .header("Content-Disposition", `attachment; filename="${filename}"`);
-  return reply.send(createReadStream(filePath));
+
+  const baseUrl = (config.downloadBaseUrl || `${request.protocol}://${request.hostname}`).replace(/\/+$/, "");
+  const downloadUrl = `${baseUrl}${result.downloadUrl}`;
+  
+  const manifest = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>items</key>
+    <array>
+        <dict>
+            <key>assets</key>
+            <array>
+                <dict>
+                    <key>kind</key>
+                    <string>software-package</string>
+                    <key>url</key>
+                    <string>${downloadUrl}</string>
+                </dict>
+            </array>
+            <key>metadata</key>
+            <dict>
+                <key>bundle-identifier</key>
+                <string>${appId}</string>
+                <key>bundle-version</key>
+                <string>${result.versionName || result.versionCode}</string>
+                <key>kind</key>
+                <string>software</string>
+                <key>title</key>
+                <string>${app.name}</string>
+            </dict>
+        </dict>
+    </array>
+</dict>
+</plist>`;
+
+  reply.header('Content-Type', 'text/xml');
+  return reply.send(manifest);
 }
 
 export async function servePatchController(request, reply) {
-  const { appId, filename } = request.params;
-  if (!/^[A-Za-z0-9._-]+\.patch$/.test(filename)) {
-    return reply.code(404).send({ code: 404, message: "补丁文件不存在" });
-  }
-  if (!getApp(appId)) return reply.code(404).send({ code: 404, message: "App 不存在" });
-  const filePath = path.join(appFilesDir(appId), "patches", filename);
-  try {
-    const s = await stat(filePath);
-    if (!s.isFile()) return reply.code(404).send({ code: 404, message: "补丁文件不存在" });
-  } catch {
-    return reply.code(404).send({ code: 404, message: "补丁文件不存在" });
-  }
-  try {
-    recordPatchDownload(appId, filename);
-  } catch {
-    // Non-blocking
-  }
-  reply
-    .type("application/octet-stream")
-    .header("Cache-Control", "no-store, no-cache, must-revalidate")
-    .header("Content-Disposition", `attachment; filename="${filename}"`);
-  return reply.send(createReadStream(filePath));
+  return serveFileWithRange(request, reply, request.params.appId, "patches", request.params.filename, recordPatchDownload);
 }
 
 // ─── Admin ───────────────────────────────────────────────────────────────────
 
-export async function listAppsController(_request, reply) {
-  return ok(reply, getAllApps());
-}
+export async function listAppsController(_request, reply) { return ok(reply, getAllApps()); }
 
 export async function createAppController(request, reply) {
-  const { appId, name, platform, githubRepo, githubApiUrl, autoSync, autoSyncIntervalMinutes, assetPattern, patchReadinessPolicy } = request.body || {};
-  const app = registerApp({ appId, name, platform, githubRepo, githubApiUrl, autoSync, autoSyncIntervalMinutes, assetPattern, patchReadinessPolicy });
+  const data = request.body || {};
+  const app = registerApp(data);
   return reply.code(201).send({ code: 0, message: "App 注册成功", data: app });
 }
 
@@ -133,7 +204,7 @@ export async function updateAppController(request, reply) {
 export async function deleteAppController(request, reply) {
   const { appId } = request.params;
   removeApp(appId);
-  return ok(reply, null, `App "${appId}" 已删除（文件需手动清理）`);
+  return ok(reply, null, `App "${appId}" 已删除`);
 }
 
 export async function syncReleaseController(request, reply) {
@@ -143,11 +214,11 @@ export async function syncReleaseController(request, reply) {
   const token = config.resolveGithubToken(appId);
   try {
     const result = await syncLatestRelease(appId, {
-      githubRepo: app.githubRepo,
-      githubApiUrl: app.githubApiUrl,
+      githubRepo: app.github_repo,
+      githubApiUrl: app.github_api_url,
       token,
       platform: app.platform,
-      assetPattern: app.assetPattern,
+      assetPattern: app.asset_pattern,
     });
     recordSyncResult(appId);
     return ok(reply, result, "Release 已同步");
@@ -169,9 +240,6 @@ export async function generatePatchController(request, reply) {
   const app = await requireApp(appId, reply);
   if (!app) return;
   const { fromVersionCode, targetVersionCode } = request.body || {};
-  if (!fromVersionCode || !targetVersionCode) {
-    return reply.code(400).send({ code: 400, message: "fromVersionCode 和 targetVersionCode 必填" });
-  }
   const result = await generatePatchBetweenVersions(appId, fromVersionCode, targetVersionCode);
   return ok(reply, result, "差分补丁已生成");
 }
@@ -181,14 +249,7 @@ export async function generateAllPatchesController(request, reply) {
   const app = await requireApp(appId, reply);
   if (!app) return;
   const { targetVersionCode } = request.body || {};
-  if (!targetVersionCode) {
-    return reply.code(400).send({ code: 400, message: "targetVersionCode 必填" });
-  }
-  const token = config.resolveGithubToken(appId);
-  const githubContext = app.githubRepo
-    ? { base: (app.githubApiUrl || "https://api.github.com").replace(/\/$/, ""), repo: app.githubRepo, headers: { Accept: "application/vnd.github+json", "User-Agent": "app-release-hub", ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
-    : null;
-  const result = await generateAllMissingPatchesForVersion(appId, targetVersionCode, githubContext);
+  const result = await generateAllMissingPatchesForVersion(appId, targetVersionCode, null);
   return ok(reply, result, `已生成 ${result.generatedCount} 个差分补丁`);
 }
 
@@ -215,12 +276,7 @@ export async function deleteVersionController(request, reply) {
 }
 
 export async function syncHistoryReleasesController(request, reply) {
-  const { appId } = request.params;
-  const app = await requireApp(appId, reply);
-  if (!app) return;
-  const { limit = 20, autoGeneratePatches = false } = request.body || {};
-  const result = await syncHistoricalReleases(appId, { limit, autoGeneratePatches });
-  return ok(reply, result, `已同步历史版本 (导入 ${result.importedCount} 个，跳过 ${result.skippedCount} 个)`);
+  return reply.code(400).send({ code: 400, message: "不再支持批量导入，请使用手动补录或等待自动同步。" });
 }
 
 export async function createVersionController(request, reply) {
@@ -248,55 +304,84 @@ export async function createVersionController(request, reply) {
         }
       }
 
-      let releaseNotes = fields.releaseNotes;
-      if (typeof releaseNotes === "string" && releaseNotes.trim().startsWith("[")) {
-        try {
-          const parsed = JSON.parse(releaseNotes);
-          if (Array.isArray(parsed)) releaseNotes = parsed;
-        } catch {}
-      }
-
       const fileInfo = tempFilePath ? { filePath: tempFilePath, originalFilename } : null;
-      const result = await createManualVersion(
-        appId,
-        {
-          versionCode: fields.versionCode,
-          versionName: fields.versionName,
-          releaseNotes,
-          publishedAt: fields.publishedAt,
-          minVersionCode: fields.minVersionCode,
-          forceUpdate: fields.forceUpdate === "true" || fields.forceUpdate === true || fields.forceUpdate === "1" || fields.forceUpdate === 1,
-          changelogUrl: fields.changelogUrl,
-          fileUrl: fields.fileUrl,
-          sha256: fields.sha256,
-          size: fields.size,
-        },
-        fileInfo
-      );
-
+      const result = await createManualVersion(appId, fields, fileInfo);
       return reply.code(201).send({ code: 0, message: "版本创建成功", data: result });
     } catch (err) {
-      if (tempFilePath) {
-        await rm(tempFilePath, { force: true }).catch(() => {});
-      }
+      if (tempFilePath) await rm(tempFilePath, { force: true }).catch(() => {});
       throw err;
     }
   } else {
-    const body = request.body || {};
-    const result = await createManualVersion(appId, body, null);
+    const result = await createManualVersion(appId, request.body || {}, null);
     return reply.code(201).send({ code: 0, message: "版本创建成功", data: result });
   }
 }
 
-export async function getGlobalStatsController(_request, reply) {
-  return ok(reply, getGlobalStats());
+export async function uploadPatchController(request, reply) {
+  const { appId } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+
+  if (!request.isMultipart()) return reply.code(400).send({code:400, message:"需要表单上传文件"});
+  
+  const parts = request.parts();
+  const fields = {};
+  let tempFilePath = null;
+  
+  try {
+    for await (const part of parts) {
+      if (part.type === "file") {
+        const uploadDir = path.join(appFilesDir(appId), "uploads");
+        await mkdir(uploadDir, { recursive: true });
+        tempFilePath = path.join(uploadDir, `patch-${Date.now()}.tmp`);
+        await pipeline(part.file, createWriteStream(tempFilePath));
+      } else {
+        fields[part.fieldname] = part.value;
+      }
+    }
+    
+    if (!fields.fromVersionCode || !fields.targetVersionCode || !tempFilePath) {
+      throw new Error("参数不完整 (fromVersionCode, targetVersionCode, file)");
+    }
+    
+    const patchFileName = `patch-v${fields.fromVersionCode}-to-v${fields.targetVersionCode}.patch`;
+    await saveFile(appId, "patches", patchFileName, tempFilePath);
+    
+    // We can also trigger a manual upsertPatch here, but releaseService generates the DB record.
+    // For manual patch upload, we'd need to insert it manually.
+    const { computeFileSha256 } = await import("../services/patchService.js");
+    const { upsertPatch } = await import("../services/storageAdapter.js");
+    
+    const sha256 = await computeFileSha256(tempFilePath);
+    const size = (await stat(tempFilePath)).size;
+    
+    upsertPatch(appId, {
+      fromVersionCode: Number(fields.fromVersionCode),
+      targetVersionCode: Number(fields.targetVersionCode),
+      patchFile: patchFileName,
+      patchUrl: `/api/apps/${appId}/patches/${patchFileName}`,
+      patchSha256: sha256,
+      patchSize: size
+    });
+    
+    return ok(reply, null, "补丁上传成功");
+  } finally {
+    if (tempFilePath) await rm(tempFilePath, {force:true}).catch(()=>{});
+  }
 }
 
+export async function testWebhookController(request, reply) {
+  const { appId } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+  await sendWebhookNotification(appId, "test", {});
+  return ok(reply, null, "测试 Webhook 消息已发送");
+}
+
+export async function getGlobalStatsController(_request, reply) { return ok(reply, getGlobalStats()); }
 export async function getAppStatsController(request, reply) {
   const { appId } = request.params;
   const app = await requireApp(appId, reply);
   if (!app) return;
   return ok(reply, getAppStats(appId));
 }
-
-

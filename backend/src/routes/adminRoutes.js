@@ -15,9 +15,11 @@ import {
   createVersionController,
   getGlobalStatsController,
   getAppStatsController,
+  uploadPatchController,
+  testWebhookController,
 } from "../controllers/appController.js";
 
-const auth = { preHandler: [apiKeyAuth] };
+const auth = { preHandler: [apiKeyAuth], config: { rateLimit: false } };
 
 export default async function adminRoutes(fastify) {
   // Statistics
@@ -44,5 +46,9 @@ export default async function adminRoutes(fastify) {
   fastify.get("/admin/apps/:appId/patches", auth, patchMatrixController);
   fastify.post("/admin/apps/:appId/patches/generate", auth, generatePatchController);
   fastify.post("/admin/apps/:appId/patches/generate-all", auth, generateAllPatchesController);
+  fastify.post("/admin/apps/:appId/patches/upload", auth, uploadPatchController);
+
+  // Webhooks
+  fastify.post("/admin/apps/:appId/webhook/test", auth, testWebhookController);
 }
 

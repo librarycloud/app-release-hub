@@ -20,13 +20,20 @@ export function insertApp({
   autoSyncIntervalMinutes = 60,
   assetPattern = "",
   patchReadinessPolicy = "hide_download_link",
+  isPrivate = false,
+  clientToken = "",
+  maxRetainedVersions = 0,
+  webhookUrl = "",
+  webhookType = "generic",
 }) {
   const policy = ["hide_download_link", "silent", "fallback_full"].includes(patchReadinessPolicy)
     ? patchReadinessPolicy
     : "hide_download_link";
+  const validWebhookTypes = ["generic", "feishu", "dingtalk", "wecom"];
+  const wType = validWebhookTypes.includes(webhookType) ? webhookType : "generic";
   db.prepare(`
-    INSERT INTO apps (app_id, name, platform, github_repo, github_api_url, auto_sync, auto_sync_interval_minutes, asset_pattern, patch_readiness_policy)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO apps (app_id, name, platform, github_repo, github_api_url, auto_sync, auto_sync_interval_minutes, asset_pattern, patch_readiness_policy, is_private, client_token, max_retained_versions, webhook_url, webhook_type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     appId,
     name,
@@ -36,7 +43,12 @@ export function insertApp({
     autoSync ? 1 : 0,
     Math.max(Number(autoSyncIntervalMinutes) || 60, 5),
     assetPattern || "",
-    policy
+    policy,
+    isPrivate ? 1 : 0,
+    clientToken || "",
+    Math.max(0, Number(maxRetainedVersions) || 0),
+    webhookUrl || "",
+    wType
   );
 }
 
@@ -67,16 +79,23 @@ export function updateApp(appId, fields) {
     "patch_readiness_policy",
     "last_synced_at",
     "last_sync_error",
+    "is_private",
+    "client_token",
+    "max_retained_versions",
+    "webhook_url",
+    "webhook_type",
   ];
   const updates = [];
   const values = [];
   for (const [k, v] of Object.entries(fields)) {
     if (allowed.includes(k)) {
       updates.push(`${k} = ?`);
-      if (k === "auto_sync") {
+      if (k === "auto_sync" || k === "is_private") {
         values.push(v ? 1 : 0);
       } else if (k === "auto_sync_interval_minutes") {
         values.push(Math.max(Number(v) || 60, 5));
+      } else if (k === "max_retained_versions") {
+        values.push(Math.max(0, Number(v) || 0));
       } else {
         values.push(v);
       }
@@ -132,6 +151,8 @@ export function formatVersion(row) {
     size: row.size,
     downloadCount: Number(row.download_count || 0),
     isLatest: Boolean(row.is_latest),
+    rolloutPercentage: Number(row.rollout_percentage ?? 100),
+    channel: row.channel || "stable",
   };
 }
 
@@ -139,12 +160,12 @@ export function upsertVersion(appId, ver) {
   // Atomically: clear previous latest flag if this is latest, then upsert
   const upsert = db.transaction(() => {
     if (ver.isLatest) {
-      db.prepare("UPDATE versions SET is_latest = 0 WHERE app_id = ?").run(appId);
+      db.prepare("UPDATE versions SET is_latest = 0 WHERE app_id = ? AND channel = ?").run(appId, ver.channel || "stable");
     }
     db.prepare(`
       INSERT INTO versions (app_id, version_code, version_name, min_version_code, force_update,
-        release_notes, changelog_url, published_at, file_url, sha256, size, is_latest)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        release_notes, changelog_url, published_at, file_url, sha256, size, is_latest, rollout_percentage, channel)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(app_id, version_code) DO UPDATE SET
         version_name     = excluded.version_name,
         min_version_code = excluded.min_version_code,
@@ -155,7 +176,9 @@ export function upsertVersion(appId, ver) {
         file_url         = excluded.file_url,
         sha256           = excluded.sha256,
         size             = excluded.size,
-        is_latest        = excluded.is_latest
+        is_latest        = excluded.is_latest,
+        rollout_percentage = excluded.rollout_percentage,
+        channel          = excluded.channel
     `).run(
       appId,
       Number(ver.versionCode),
@@ -169,19 +192,27 @@ export function upsertVersion(appId, ver) {
       String(ver.sha256 ?? ""),
       Number(ver.size ?? 0),
       ver.isLatest ? 1 : 0,
+      Number(ver.rolloutPercentage ?? 100),
+      String(ver.channel || "stable"),
     );
   });
   upsert();
 }
 
 export function updateVersion(appId, versionCode, fields) {
-  const allowed = ["force_update", "min_version_code", "release_notes", "version_name", "changelog_url"];
+  const allowed = ["force_update", "min_version_code", "release_notes", "version_name", "changelog_url", "rollout_percentage", "channel"];
   const updates = [];
   const values = [];
   for (const [k, v] of Object.entries(fields)) {
     if (allowed.includes(k)) {
       updates.push(`${k} = ?`);
-      values.push(k === "force_update" ? (v ? 1 : 0) : v);
+      if (k === "force_update") {
+        values.push(v ? 1 : 0);
+      } else if (k === "rollout_percentage") {
+        values.push(Math.max(1, Math.min(100, Number(v) || 100)));
+      } else {
+        values.push(v);
+      }
     }
   }
   if (updates.length === 0) return getVersion(appId, versionCode);

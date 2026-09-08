@@ -1,5 +1,6 @@
 import path from "node:path";
 import { stat } from "node:fs/promises";
+import crypto from "node:crypto";
 import { config } from "../config.js";
 import {
   getApp,
@@ -84,15 +85,30 @@ function parseVersion(row) {
     size: Number(row.size),
     downloadCount: Number(row.download_count || 0),
     isLatest: row.is_latest === 1,
+    rolloutPercentage: Number(row.rollout_percentage ?? 100),
+    channel: row.channel || "stable",
   };
 }
 
 /**
  * Get version info for a client, including incremental patch info if available.
  */
-export async function getVersionForClient(appId, { currentVersionCode, policy } = {}) {
-  const latestRow = getLatestVersion(appId);
-  if (!latestRow) throw new Error(`App "${appId}" 暂无发布版本`);
+
+function isVersionQualifying(ver, deviceId) {
+  if (ver.rolloutPercentage < 100 && deviceId) {
+    const hashStr = crypto.createHash('md5').update(`${deviceId}:${ver.versionCode}`).digest('hex');
+    const hashNum = parseInt(hashStr.substring(0, 8), 16) % 100;
+    if (hashNum >= ver.rolloutPercentage) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function getVersionForClient(appId, { currentVersionCode, policy, channel = "stable", deviceId = "" } = {}) {
+  const historyRows = getVersionHistory(appId);
+  const latestRow = historyRows.find(r => r.channel === channel && isVersionQualifying(parseVersion(r), deviceId));
+  if (!latestRow) return null; // No qualifying version found
 
   const appRow = getApp(appId);
   const configuredPolicy = appRow?.patch_readiness_policy || "hide_download_link";
@@ -305,7 +321,7 @@ export async function getPatchMatrix(appId) {
 /**
  * Update version configuration (forceUpdate, minVersionCode, releaseNotes, etc.)
  */
-export async function updateVersionConfig(appId, versionCode, { forceUpdate, minVersionCode, releaseNotes, versionName } = {}) {
+export async function updateVersionConfig(appId, versionCode, { forceUpdate, minVersionCode, releaseNotes, versionName, channel, rolloutPercentage } = {}) {
   const app = getApp(appId);
   if (!app) throw new Error(`App "${appId}" 不存在`);
 
@@ -338,6 +354,8 @@ export async function updateVersionConfig(appId, versionCode, { forceUpdate, min
     if (!name) throw new Error("versionName 不能为空");
     fields.version_name = name;
   }
+  if (channel !== undefined) fields.channel = String(channel);
+  if (rolloutPercentage !== undefined) fields.rollout_percentage = Math.max(1, Math.min(100, Number(rolloutPercentage) || 100));
 
   const updated = updateVersion(appId, vCode, fields);
   return parseVersion(updated);

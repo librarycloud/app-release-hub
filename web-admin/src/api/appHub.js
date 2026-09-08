@@ -44,6 +44,10 @@ export const deleteVersion = (appId, versionCode) => http.delete(`/admin/apps/${
 export const getPatchMatrix = (appId) => http.get(`/admin/apps/${appId}/patches`);
 export const generatePatch = (appId, data) => http.post(`/admin/apps/${appId}/patches/generate`, data);
 export const generateAllPatches = (appId, data) => http.post(`/admin/apps/${appId}/patches/generate-all`, data);
+export const uploadPatch = (appId, data) => http.post(`/admin/apps/${appId}/patches/upload`, data, { headers: { "Content-Type": "multipart/form-data" } });
+
+// ─── Webhooks ────────────────────────────────────────────────────────────────
+export const testWebhook = (appId) => http.post(`/admin/apps/${appId}/webhook/test`);
 
 // ─── Stats ───────────────────────────────────────────────────────────────────
 export const getGlobalStats = () => http.get("/admin/stats/overview");

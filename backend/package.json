@@ -10,12 +10,16 @@
     "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1127.0",
+    "@aws-sdk/lib-storage": "^3.1127.0",
+    "@aws-sdk/s3-request-presigner": "^3.1127.0",
     "@fastify/cors": "^11.3.0",
     "@fastify/multipart": "^9.4.0",
     "@fastify/rate-limit": "^10.3.0",
     "better-sqlite3": "^13.0.3",
     "dotenv": "^16.4.5",
-    "fastify": "^5.12.3"
+    "fastify": "^5.12.3",
+    "p-queue": "^9.3.3"
   },
   "devDependencies": {
     "vitest": "^3.2.7"

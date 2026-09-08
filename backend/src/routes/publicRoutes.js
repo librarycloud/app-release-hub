@@ -2,14 +2,24 @@ import {
   clientVersionController,
   serveReleaseController,
   servePatchController,
+  electronUpdateController,
+  iosManifestController,
 } from "../controllers/appController.js";
+import { config } from "../config.js";
 
 export default async function publicRoutes(fastify) {
-  // Client version check — no auth required (supports universal & platform-specific)
-  fastify.get("/api/apps/:appId/version", clientVersionController);
-  fastify.get("/api/apps/:appId/version/:platform", clientVersionController);
+  const publicLimit = { rateLimit: { max: config.rateLimitPublic, timeWindow: "1 minute" } };
+  const downloadLimit = { rateLimit: { max: config.rateLimitDownloads, timeWindow: "1 minute" } };
 
-  // File serving — no auth, but path-validated and rate-limited at app level
-  fastify.get("/api/apps/:appId/releases/:filename", serveReleaseController);
-  fastify.get("/api/apps/:appId/patches/:filename", servePatchController);
+  // Client version check (supports token query via controller)
+  fastify.get("/api/apps/:appId/version", { config: publicLimit }, clientVersionController);
+  fastify.get("/api/apps/:appId/version/:platform", { config: publicLimit }, clientVersionController);
+
+  // File serving
+  fastify.get("/api/apps/:appId/releases/:filename", { config: downloadLimit }, serveReleaseController);
+  fastify.get("/api/apps/:appId/patches/:filename", { config: downloadLimit }, servePatchController);
+
+  // Ecosystem Support
+  fastify.get("/api/apps/:appId/update/darwin/:currentVersion", { config: publicLimit }, electronUpdateController);
+  fastify.get("/api/apps/:appId/install.plist", { config: publicLimit }, iosManifestController);
 }

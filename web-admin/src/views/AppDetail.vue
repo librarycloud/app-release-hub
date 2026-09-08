@@ -598,6 +598,35 @@
           </el-select>
           <span class="hint">当发布新版本但差分包尚未生成完毕时，控制客户端检查更新时的表现</span>
         </el-form-item>
+        
+        <el-divider content-position="left">高级控制与运维</el-divider>
+
+        <el-form-item label="鉴权保护" prop="isPrivate">
+          <el-switch v-model="editForm.isPrivate" active-text="开启 (需要 Token 下载)" inactive-text="公开" />
+        </el-form-item>
+        <el-form-item label="Client Token" prop="clientToken" v-if="editForm.isPrivate">
+          <el-input v-model="editForm.clientToken" placeholder="客户端请求时需携带 x-client-token 头或 token 查询参数" />
+        </el-form-item>
+
+        <el-form-item label="保留版本数" prop="maxRetainedVersions">
+          <el-input-number v-model="editForm.maxRetainedVersions" :min="0" />
+          <span style="font-size: 12px; color: #999; margin-left: 10px;">(0 表示不限制。超出数量的历史版本及其补丁将被自动清理)</span>
+        </el-form-item>
+
+        <el-form-item label="Webhook URL" prop="webhookUrl">
+          <div style="display:flex;gap:10px;width:100%">
+            <el-input v-model="editForm.webhookUrl" placeholder="如 https://open.feishu.cn/open-apis/bot/v2/hook/..." />
+            <el-button @click="doTestWebhook" :disabled="!editForm.webhookUrl" :loading="testingWebhook">发送测试</el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="Webhook 类型" prop="webhookType" v-if="editForm.webhookUrl">
+          <el-radio-group v-model="editForm.webhookType">
+            <el-radio-button label="generic">通用 JSON</el-radio-button>
+            <el-radio-button label="feishu">飞书</el-radio-button>
+            <el-radio-button label="dingtalk">钉钉</el-radio-button>
+            <el-radio-button label="wecom">企微</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEditDialog = false">取消</el-button>
@@ -758,6 +787,38 @@
       </template>
     </el-dialog>
   </div>
+
+    <!-- Upload Patch Dialog -->
+    <el-dialog v-model="uploadPatchVisible" title="手动上传差分包" width="500px">
+      <el-form :model="uploadPatchForm" label-width="120px" ref="uploadPatchFormRef">
+        <el-form-item label="目标版本" prop="targetVersionCode">
+          <el-input v-model="uploadPatchForm.targetVersionCode" disabled />
+        </el-form-item>
+        <el-form-item label="前置版本" prop="fromVersionCode" :rules="[{required: true, message: '请选择或填写前置版本'}]">
+          <el-input v-model="uploadPatchForm.fromVersionCode" placeholder="如 123" />
+        </el-form-item>
+        <el-form-item label="补丁文件" prop="file" :rules="[{required: true, message: '请选择 .patch 文件'}]">
+          <el-upload
+            class="upload-demo"
+            action=""
+            :auto-upload="false"
+            :limit="1"
+            :on-change="onPatchFileChange"
+            :on-remove="onPatchFileRemove"
+            accept=".patch"
+          >
+            <template #trigger>
+              <el-button type="primary">选择文件</el-button>
+            </template>
+          </el-upload>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="uploadPatchVisible = false">取消</el-button>
+        <el-button type="primary" :loading="uploadingPatch" @click="submitUploadPatch">上传并保存</el-button>
+      </template>
+    </el-dialog>
+
 </template>
 
 <script setup>
@@ -779,6 +840,8 @@ import {
   createVersion,
   getPatchMatrix,
   generateAllPatches,
+  testWebhook,
+  uploadPatch,
   generatePatch,
   updateVersion,
   deleteVersion,
@@ -951,6 +1014,11 @@ const editForm = ref({
   assetPattern: "",
   patchReadinessPolicy: "hide_download_link",
   autoSync: false,
+  isPrivate: false,
+  clientToken: "",
+  maxRetainedVersions: 0,
+  webhookUrl: "",
+  webhookType: "generic",
 });
 
 // Sync history dialog
@@ -1015,6 +1083,12 @@ function openEditDialog() {
     autoSync: Boolean(appInfo.value.autoSync),
     autoSyncIntervalMinutes: currentMinutes,
     intervalPreset: isPreset ? currentMinutes : "custom",
+    customIntervalMinutes: isPreset ? null : currentMinutes,
+    isPrivate: Boolean(appInfo.value.isPrivate),
+    clientToken: appInfo.value.clientToken || "",
+    maxRetainedVersions: appInfo.value.maxRetainedVersions || 0,
+    webhookUrl: appInfo.value.webhookUrl || "",
+    webhookType: appInfo.value.webhookType || "generic",
   };
   showEditDialog.value = true;
 }
@@ -1032,6 +1106,11 @@ async function submitEditApp() {
       patchReadinessPolicy: editForm.value.patchReadinessPolicy,
       autoSync: editForm.value.autoSync,
       autoSyncIntervalMinutes: Number(editForm.value.autoSyncIntervalMinutes) || 60,
+      isPrivate: Boolean(editForm.value.isPrivate),
+      clientToken: editForm.value.clientToken,
+      maxRetainedVersions: editForm.value.maxRetainedVersions,
+      webhookUrl: editForm.value.webhookUrl,
+      webhookType: editForm.value.webhookType,
     };
     await updateApp(appId, payload);
     ElMessage.success("App 配置已更新");

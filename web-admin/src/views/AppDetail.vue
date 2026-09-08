@@ -10,86 +10,124 @@
     </div>
 
     <!-- Toolbar -->
-    <div class="toolbar">
-      <div class="toolbar-info">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <h2 style="margin:0">{{ appInfo?.name || appId }}</h2>
-          <el-tag size="small" type="info">{{ appId }}</el-tag>
-          <el-tag size="small">{{ appInfo?.platform || 'android' }}</el-tag>
+    <div class="toolbar modern-card">
+      <!-- Top Row: Identity & Primary Actions -->
+      <div class="toolbar-header">
+        <div class="app-identity">
+          <div class="app-avatar-badge" :class="appInfo?.platform || 'android'">
+            {{ platformIcon(appInfo?.platform || 'android') }}
+          </div>
+          <div class="app-title-block">
+            <div class="app-title-line">
+              <h2 class="app-title-text">{{ appInfo?.name || appId }}</h2>
+              <code class="app-id-tag" title="App ID">{{ appId }}</code>
+              <el-tag size="small" :type="platformTagType(appInfo?.platform)">
+                {{ (appInfo?.platform || 'android').toUpperCase() }}
+              </el-tag>
+              <el-tag
+                size="small"
+                :type="appInfo?.isPrivate ? 'danger' : 'info'"
+                effect="plain"
+                class="clickable-tag"
+                title="点击修改私有鉴权设置"
+                @click="openEditDialog"
+              >
+                {{ appInfo?.isPrivate ? '🔒 私有保护' : '🌐 公开访问' }}
+              </el-tag>
+              <el-tag
+                size="small"
+                :type="bsdiffAvailable ? 'success' : 'warning'"
+                effect="plain"
+              >
+                {{ bsdiffAvailable ? '⚡ bsdiff 可用' : '⚠️ bsdiff 未就绪' }}
+              </el-tag>
+            </div>
+          </div>
         </div>
-        <div class="sub-row">
-          <span v-if="appInfo?.githubRepo" class="repo-link">
-            📦 {{ appInfo.githubRepo }}
-          </span>
-          <span v-if="appInfo?.assetPattern" class="sub" style="color:#409eff">
-            🔍 匹配正则: <code>{{ appInfo.assetPattern }}</code>
-          </span>
-          <span class="sub" v-if="bsdiffAvailable">✅ bsdiff 可用</span>
-          <span class="sub warn" v-else>⚠️ bsdiff 未安装，无法生成差分包</span>
-          <span v-if="appInfo?.lastSyncedAt" class="sub" :title="`浏览器时区: ${browserTimeZone} (${timeZoneOffset})`">
-            最近检查: {{ formatShortTime(appInfo.lastSyncedAt) }} <span class="tz-sub">({{ timeZoneOffset }})</span>
-          </span>
-          <el-tag
-            size="small"
-            type="info"
-            effect="plain"
-            style="cursor:pointer"
+
+        <div class="toolbar-actions">
+          <el-button @click="openSharePage">
+            🔗 公开下载页
+          </el-button>
+          <el-button @click="openEditDialog">
+            ⚙️ 配置
+          </el-button>
+          <el-button @click="openPreviewDialog">
+            🔍 预览 Release
+          </el-button>
+          <el-button @click="openSyncHistoryDialog">
+            <span class="btn-text-full">📥 批量导入历史</span>
+            <span class="btn-text-short">📥 导入历史</span>
+          </el-button>
+          <el-button @click="openManualVersionDialog">
+            <span class="btn-text-full">➕ 补录旧版本</span>
+            <span class="btn-text-short">➕ 补录</span>
+          </el-button>
+          <el-button type="primary" :loading="syncing" @click="doSync">
+            🔄 同步最新 Release
+          </el-button>
+        </div>
+      </div>
+
+      <!-- Bottom Row: Metadata Ribbon (Full width, balanced layout) -->
+      <div class="toolbar-meta-ribbon">
+        <div class="meta-chip" v-if="appInfo?.githubRepo">
+          <span class="meta-chip-label">📦 仓库:</span>
+          <a
+            :href="`https://github.com/${appInfo.githubRepo}`"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="meta-chip-link"
+            title="前往 GitHub 仓库"
+          >
+            {{ appInfo.githubRepo }} ↗
+          </a>
+        </div>
+
+        <div class="meta-chip" v-if="appInfo?.assetPattern">
+          <span class="meta-chip-label">🎯 匹配正则:</span>
+          <code class="meta-chip-code">{{ appInfo.assetPattern }}</code>
+        </div>
+
+        <div class="meta-chip" v-if="appInfo">
+          <span class="meta-chip-label">🔄 定时同步:</span>
+          <div class="meta-sync-ctrl">
+            <el-switch v-model="appInfo.autoSync" size="small" @change="toggleAutoSync" />
+            <span
+              v-if="appInfo.autoSync"
+              class="meta-interval-link"
+              title="点击修改定时同步周期"
+              @click="openEditDialog"
+            >
+              {{ formatInterval(appInfo.autoSyncIntervalMinutes) }} ✏️
+            </span>
+            <span v-else class="meta-chip-muted">未开启</span>
+          </div>
+        </div>
+
+        <div class="meta-chip">
+          <span class="meta-chip-label">⚙️ 差分策略:</span>
+          <span
+            class="meta-chip-interactive"
             title="点击修改差分就绪策略"
             @click="openEditDialog"
           >
-            ⚙️ {{ formatPolicyLabel(appInfo?.patchReadinessPolicy) }}
-          </el-tag>
-          <el-tag
-            size="small"
-            :type="appInfo?.isPrivate ? 'danger' : 'info'"
-            effect="plain"
-            style="cursor:pointer"
-            title="点击修改私有鉴权设置"
-            @click="openEditDialog"
-          >
-            {{ appInfo?.isPrivate ? '🔒 私有鉴权保护' : '🌐 公开访问' }}
-          </el-tag>
-          <span v-if="appInfo?.lastSyncError" class="sub warn">
-            ⚠️ {{ appInfo.lastSyncError }}
+            {{ formatPolicyLabel(appInfo?.patchReadinessPolicy) }} ✏️
           </span>
         </div>
-      </div>
-      <div class="toolbar-actions">
-        <div class="auto-sync-box" v-if="appInfo">
-          <span style="font-size:13px;color:#666">定时同步:</span>
-          <el-switch v-model="appInfo.autoSync" @change="toggleAutoSync" />
-          <el-tag
-            v-if="appInfo.autoSync"
-            size="small"
-            type="success"
-            effect="plain"
-            style="cursor:pointer"
-            title="点击修改定时同步周期"
-            @click="openEditDialog"
-          >
-            {{ formatInterval(appInfo.autoSyncIntervalMinutes) }} ✏️
-          </el-tag>
+
+        <div class="meta-chip" v-if="appInfo?.lastSyncedAt">
+          <span class="meta-chip-label">🕒 最近检查:</span>
+          <span class="meta-chip-val" :title="`浏览器时区: ${browserTimeZone} (${timeZoneOffset})`">
+            {{ formatShortTime(appInfo.lastSyncedAt) }} <span class="tz-sub">({{ timeZoneOffset }})</span>
+          </span>
         </div>
-        <el-button @click="openSharePage">
-          🔗 公开下载页
-        </el-button>
-        <el-button @click="openEditDialog">
-          ⚙️ 配置
-        </el-button>
-        <el-button @click="openSyncHistoryDialog">
-          <span class="btn-text-full">📥 批量导入历史</span>
-          <span class="btn-text-short">📥 批量导入</span>
-        </el-button>
-        <el-button @click="openManualVersionDialog">
-          <span class="btn-text-full">➕ 补录旧版本</span>
-          <span class="btn-text-short">➕ 补录版本</span>
-        </el-button>
-        <el-button @click="openPreviewDialog">
-          🔍 预览 Release
-        </el-button>
-        <el-button type="primary" :loading="syncing" @click="doSync">
-          🔄 同步最新 Release
-        </el-button>
+
+        <div class="meta-chip meta-chip-error" v-if="appInfo?.lastSyncError">
+          <span class="meta-error-text" :title="appInfo.lastSyncError">
+            ⚠️ 同步异常: {{ appInfo.lastSyncError }}
+          </span>
+        </div>
       </div>
     </div>
 
@@ -1704,6 +1742,14 @@ function copyLink(url) {
   ElMessage.success("已复制到剪贴板");
 }
 
+function platformIcon(p) {
+  return { android: "🤖", windows: "🪟", macos: "🍎", linux: "🐧", ios: "📱", wgt: "⚡", rn: "⚛️" }[p] || "📦";
+}
+
+function platformTagType(p) {
+  return { android: "success", windows: "primary", macos: "warning", linux: "danger", ios: "info", wgt: "warning", rn: "primary" }[p] || "info";
+}
+
 onMounted(() => {
   handleResize();
   window.addEventListener("resize", handleResize);
@@ -1733,60 +1779,205 @@ onUnmounted(() => {
   gap: 10px;
 }
 
+/* App Toolbar Header Card */
 .toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-  padding: 20px;
   background: var(--app-card-bg);
   border: 1px solid var(--app-card-border);
   border-radius: 12px;
   box-shadow: var(--app-card-shadow);
+  padding: 18px 22px;
+  margin-bottom: 24px;
+}
+
+.toolbar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   flex-wrap: wrap;
   gap: 16px;
 }
 
-.toolbar-info {
-  flex: 1;
-  min-width: 260px;
+.app-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 
-.toolbar-actions {
+.app-avatar-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--app-surface-subtle);
+  border: 1px solid var(--app-card-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.app-avatar-badge.android { background: rgba(16, 185, 129, 0.12); }
+.app-avatar-badge.windows { background: rgba(59, 130, 246, 0.12); }
+.app-avatar-badge.macos { background: rgba(245, 158, 11, 0.12); }
+.app-avatar-badge.linux { background: rgba(239, 68, 68, 0.12); }
+.app-avatar-badge.ios { background: rgba(99, 102, 241, 0.12); }
+.app-avatar-badge.wgt { background: rgba(245, 158, 11, 0.12); }
+.app-avatar-badge.rn { background: rgba(14, 165, 233, 0.12); }
+
+.app-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-title-line {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-.auto-sync-box {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.app-title-text {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--app-text-main);
+  letter-spacing: -0.01em;
 }
 
-.sub-row {
+.app-id-tag {
+  background: var(--app-surface-subtle);
+  border: 1px solid var(--app-card-border);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--app-text-muted);
+  font-family: monospace;
+}
+
+.clickable-tag {
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.clickable-tag:hover {
+  opacity: 0.8;
+}
+
+.toolbar-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 8px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
-.repo-link {
+/* Bottom Metadata Ribbon (Full Width) */
+.toolbar-meta-ribbon {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--app-card-border);
   font-size: 13px;
-  color: var(--app-accent);
+}
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.meta-chip-label {
+  color: var(--app-text-muted);
+  font-weight: 500;
+}
+
+.meta-chip-link {
+  color: var(--app-accent, #3b82f6);
+  text-decoration: none;
   font-family: monospace;
-  word-break: break-all;
+  font-weight: 500;
+  transition: color 0.15s ease;
 }
 
-.sub {
-  font-size: 13px;
+.meta-chip-link:hover {
+  text-decoration: underline;
+  color: #2563eb;
+}
+
+.meta-chip-code {
+  background: var(--app-surface-subtle);
+  border: 1px solid var(--app-card-border);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--app-accent, #3b82f6);
+  font-family: monospace;
+}
+
+.meta-sync-ctrl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meta-interval-link {
   color: #10b981;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 2px 8px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
 }
 
-.sub.warn {
-  color: #f59e0b;
+.meta-interval-link:hover {
+  background: rgba(16, 185, 129, 0.2);
+}
+
+.meta-chip-muted {
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.meta-chip-interactive {
+  cursor: pointer;
+  color: var(--app-text-sub);
+  background: var(--app-surface-subtle);
+  border: 1px solid var(--app-card-border);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  transition: all 0.15s ease;
+}
+
+.meta-chip-interactive:hover {
+  border-color: var(--app-accent);
+  color: var(--app-accent);
+}
+
+.meta-chip-val {
+  color: var(--app-text-sub);
+  font-size: 13px;
+}
+
+.meta-chip-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  padding: 2px 10px;
+  border-radius: 6px;
+}
+
+.meta-error-text {
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 /* App Stats Overview Banner */
@@ -2704,17 +2895,21 @@ onUnmounted(() => {
   }
 
   .toolbar {
-    padding: 12px 12px;
+    padding: 14px 12px;
+  }
+
+  .toolbar-header {
+    flex-direction: column;
+    align-items: flex-start;
     gap: 12px;
   }
 
-  .toolbar-info h2 {
-    font-size: 18px;
+  .app-identity {
+    width: 100%;
   }
 
-  .sub-row {
-    font-size: 12px;
-    gap: 6px;
+  .app-title-text {
+    font-size: 18px;
   }
 
   .toolbar-actions {
@@ -2722,17 +2917,6 @@ onUnmounted(() => {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
-  }
-
-  .toolbar-actions .auto-sync-box {
-    grid-column: 1 / -1;
-    margin-bottom: 4px;
-    padding: 8px 10px;
-    background: var(--app-surface-subtle);
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
   }
 
   .toolbar-actions .el-button {
@@ -2744,6 +2928,14 @@ onUnmounted(() => {
 
   .toolbar-actions .el-button--primary {
     grid-column: 1 / -1;
+  }
+
+  .toolbar-meta-ribbon {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
   }
 
   /* Stats overview & trend */

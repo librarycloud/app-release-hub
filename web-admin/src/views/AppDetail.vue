@@ -47,24 +47,22 @@
 
         <div class="toolbar-actions">
           <el-button @click="openSharePage">
-            🔗 公开下载页
+            🔗 下载页
           </el-button>
           <el-button @click="openEditDialog">
             ⚙️ 配置
           </el-button>
           <el-button @click="openPreviewDialog">
-            🔍 预览 Release
+            🔍 预览
           </el-button>
           <el-button @click="openSyncHistoryDialog">
-            <span class="btn-text-full">📥 批量导入历史</span>
-            <span class="btn-text-short">📥 导入历史</span>
+            📥 导入历史
           </el-button>
           <el-button @click="openManualVersionDialog">
-            <span class="btn-text-full">➕ 补录旧版本</span>
-            <span class="btn-text-short">➕ 补录</span>
+            ➕ 补录
           </el-button>
           <el-button type="primary" :loading="syncing" @click="doSync">
-            🔄 同步最新 Release
+            🔄 同步最新
           </el-button>
         </div>
       </div>
@@ -1785,7 +1783,7 @@ onUnmounted(() => {
   border: 1px solid var(--app-card-border);
   border-radius: 12px;
   box-shadow: var(--app-card-shadow);
-  padding: 18px 22px;
+  padding: 16px 20px;
   margin-bottom: 24px;
 }
 
@@ -1794,26 +1792,26 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px;
 }
 
 .app-identity {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .app-avatar-badge {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
   background: var(--app-surface-subtle);
   border: 1px solid var(--app-card-border);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
+  font-size: 20px;
   flex-shrink: 0;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 }
@@ -1835,13 +1833,13 @@ onUnmounted(() => {
 .app-title-line {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .app-title-text {
   margin: 0;
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 700;
   color: var(--app-text-main);
   letter-spacing: -0.01em;
@@ -1850,7 +1848,7 @@ onUnmounted(() => {
 .app-id-tag {
   background: var(--app-surface-subtle);
   border: 1px solid var(--app-card-border);
-  padding: 2px 8px;
+  padding: 1px 7px;
   border-radius: 6px;
   font-size: 12px;
   color: var(--app-text-muted);
@@ -1869,8 +1867,21 @@ onUnmounted(() => {
 .toolbar-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+}
+
+.toolbar-actions :deep(.el-button) {
+  margin: 0 !important;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+  border-radius: 6px;
+}
+
+.toolbar-actions :deep(.el-button--primary) {
+  padding: 0 12px;
+  font-weight: 500;
 }
 
 /* Bottom Metadata Ribbon (Full Width) */

@@ -19,15 +19,28 @@
 ## 🌟 系统特性
 
 - 📦 **多应用与多平台统管**：单套系统统一管理 Android (`.apk`/`.aab`)、Windows (`.exe`/`.msi`)、macOS (`.dmg`/`.pkg`)、Linux (`.AppImage`/`.deb`)、iOS (`.ipa`) 等多端多应用。
-- 🔄 **任意 GitHub Release 自动化拉取**：支持公开仓库及私有仓库（按 App 配置独立 Token），一键同步最新发布产物。
-- ⚡ **智能 bsdiff 增量差分补丁**：新版本发布时自动与历史前 3 个版本（及按需动态补全）生成二进制差分包。用户仅需下载几 MB 的补丁即可原地升级，大幅节省 CDN 带宽与用户等待时间。
-- 🛡️ **严格的版本策略控制**：
-  - **强制更新**：支持针对特定版本一键开启强制更新，或指定 `minVersionCode`（低于该版本的客户端强制更新）。
-  - **跨版本强制传导**：若旧版本与最新版本之间存在任意强制更新的历史版本，升级时自动判定为强制更新，防止跨版本漏更致命补丁。
-  - **版本日志自动累积**：客户端跨多个版本升级时，系统自动汇聚中间所有版本的 Release Notes（如 `v1.2.1: 修复...`、`v1.2.0: 新增...`），无需客户端手动拼接。
-- 🎯 **三级智能资产识别**：支持伴生元数据清单（`app-version.json`）、自定义正则规则（`assetPattern`）及平台智能推断回退。
-- 📊 **下载与检查请求统计**：全自动统计各 App、各版本的客户端检查更新请求次数及安装包/差分补丁下载次数，管理后台内置全局概况卡片与近 7 天活动趋势图。
-- 🗄️ **轻量级零外部依赖**：基于 Node.js 20 + Fastify + SQLite (better-sqlite3)，开箱即用，单机或容器秒级部署。
+- 🔄 **GitHub Release 自动化拉取**：支持公开仓库及私有仓库（按 App 配置独立 Token），一键同步最新发布产物。
+- ⚡ **智能 bsdiff 增量差分补丁**：新版本发布时自动与历史版本生成二进制差分包。用户仅需下载几 MB 的补丁即可原地升级，大幅节省 CDN 带宽与用户等待时间。
+- ☁️ **对象存储支持 (S3 / R2 / MinIO / OSS / COS)**：支持本地磁盘与 S3 兼容存储无缝切换，大文件并发分片上传，下载直出预签名临时重定向，解耦单机网络带宽。
+- 📱 **公开分享落地页 (`/share/:appId`)**：自带蒲公英/fir.im 风格的极简毛玻璃测试分发下载页，免登录直达，附带动态二维码支持手机直接扫码安装。
+- 🎛️ **阶梯式灰度发布 (Staged Rollout) & 多渠道隔离**：
+  - 基于设备唯一 ID 进行确定性哈希分流 (`1% - 100%`)，支持分批平稳推送。
+  - 支持 `stable`、`beta`、`alpha` 等发布通道隔离。
+- ⏪ **版本一键回滚 (Rollback)**：生产版本发生致命故障时，可在管理后台一键将任意历史版本恢复为最新生效版本，自动刷新底层软链并触发 Webhook 警报。
+- 📊 **设备活跃统计 (UV) & 版本覆盖率分布**：
+  - 自动对客户端 `deviceId` 统计去重，呈现全网独立设备装机总量及今日活跃设备数。
+  - 提供 Google Play Console 风格的多色堆叠分布进度条与各版本设备占比明细。
+- 🔍 **GitHub Release 资产预先预览**：在执行大文件同步前，先实时检测 Release 匹配情况与元数据解析，防止正则或清单配错。
+- 🛡️ **安全与流控保护**：
+  - **私有包鉴权 (Private App Token)**：开启后仅持有 Client Token 的客户端可查询版本及下载。
+  - **细粒度限流 (Rate Limiting)**：API 请求与安装包下载分别施加独立频率限制，防恶意刷量打崩。
+  - **并发差分守护**：基于任务队列严格限制 bsdiff 最大并发数，彻底杜绝 CPU/内存被打爆宕机。
+- 🔔 **多平台 Webhook 告警与通知**：新版本发布、版本回滚、同步失败时，主动推送格式化卡片至飞书、钉钉、企业微信或自定义 Webhook。
+- 🍏 **原生生态对接**：
+  - **iOS OTA 原生直接安装**：提供 `install.plist` 协议，Safari 点击即刻调用 `itms-services://` 静默安装。
+  - **Electron 自动更新标准**：原生兼容 Squirrel.Mac / Auto-Updater 格式，无缝接入桌面端更新。
+- 📦 **配置批量导入与导出**：一键导出全量 App 配置为 JSON，支持跨环境极速迁移与灾备同步。
+- 🗄️ **轻量级零外部数据库依赖**：基于 Node.js LTS + Fastify + SQLite (better-sqlite3)，单机或容器秒级部署，开箱即用。
 
 ---
 
@@ -181,13 +194,43 @@ curl -X POST "https://hub.example.com/admin/apps/{appId}/sync" \
 #### 请求 Query 参数
 | 参数名 | 类型 | 必填 | 说明 |
 | :--- | :--- | :---: | :--- |
-| `versionCode` | `number` | **推荐** | 客户端当前安装的数字版本号。不传则无法计算增量包，直接返回全量最新包 |
+| `versionCode` | `number` | **推荐** | 客户端当前安装的数字版本号。不传则无法计算增量包，直接返回全量最新包（也用于**版本覆盖率分布统计**） |
+| `deviceId` | `string` | **推荐** | 客户端匿名唯一标识（或通过 Header `x-device-id` 传递）。用于**独立设备 UV 统计**与**按比例灰度发布** |
+| `channel` | `string` | 否 | 请求的发布通道，默认为 `stable`，可传 `beta`、`alpha`、`nightly` |
+| `token` | `string` | 私有包必填 | 访问私有 App 时的客户端 Token（或通过 Header `x-client-token` 传递） |
 | `currentVersionCode` | `number` | 否 | `versionCode` 的别名兼容参数 |
 | `policy` | `string` | 否 | 差分未就绪时的临时策略覆盖：`hide_download_link`（默认，不给下载链接）、`silent`（静默不提示）、`fallback_full`（回退全量下载） |
 
 ---
 
-### 2. 接口响应数据结构详解
+### 2. 公开分享下载落地页 (`/share/:appId`)
+
+测试人员或终端用户可在手机浏览器或电脑上直接打开下载落地页：
+```http
+GET https://hub.example.com/share/{appId}
+```
+- **特性**：免管理员登录，自适应深浅色，附带动态二维码可供手机相机直接扫码安装。
+- **iOS 免签名一键安装**：对于 iOS 平台应用，页面自动对接 Apple 原生 `itms-services://?action=download-manifest&url=.../install.plist`，实现 Safari 点击一键直接安装。
+- **私有 App**：若该 App 开启了私有鉴权保护，页面会提示输入访问 Token，校验通过后方可下载。
+
+---
+
+### 3. 原生生态接口对接
+
+#### 🍏 iOS OTA 安装清单接口 (`/api/apps/:appId/install.plist`)
+返回符合 Apple Spec 的 `itms-services` manifest XML，供 Safari 唤起系统级应用安装。
+```http
+GET /api/apps/{appId}/install.plist?token=<client_token>
+```
+
+#### 💻 Electron 自动更新接口 (`/api/apps/:appId/update/darwin/:currentVersion`)
+完全兼容 Squirrel.Mac 及 `electron-updater` 原生规范：
+- 有更新时返回 HTTP 200 及更新元数据 `{ name, notes, pub_date, url }`；
+- 无更新时返回 HTTP 204 (No Content)。
+
+---
+
+### 4. 接口响应数据结构详解
 
 所有响应均遵循 Fastify 统一包装格式 `{ code, message, data }`，`code === 0` 代表业务成功。
 
@@ -642,19 +685,27 @@ X-API-Key: <ADMIN_API_KEY>
 
 | 接口分类 | 方法 | 路径 | 功能说明 |
 | :--- | :---: | :--- | :--- |
-| **应用注册** | `GET` | `/admin/apps` | 查询所有已纳管的 App 列表 |
-| | `POST` | `/admin/apps` | 注册新 App |
-| | `PATCH` | `/admin/apps/:appId` | 更新 App 配置（名称、仓库、平台、正则等） |
+| **应用注册与配置** | `GET` | `/admin/apps` | 查询所有已纳管的 App 列表 |
+| | `POST` | `/admin/apps` | 注册新 App（支持配置私有 Token、最大保留版本、Webhook） |
+| | `PATCH` | `/admin/apps/:appId` | 更新 App 配置（名称、仓库、平台、正则、私有状态、Webhook 等） |
 | | `DELETE` | `/admin/apps/:appId` | 删除 App（释放配置，保留磁盘数据） |
+| | `GET` | `/admin/apps/export` | **导出所有 App 配置为 JSON 文件** |
+| | `POST` | `/admin/apps/import` | **批量导入 App 配置 JSON 数组**（自动新建或更新） |
 | **同步与导入** | `POST` | `/admin/apps/:appId/sync` | **手动同步单个 App 的最新 Release** |
 | | `POST` | `/admin/apps/:appId/sync-history` | **批量导入 GitHub 历史 Release**（可批量补齐历史安装包与说明） |
 | | `POST` | `/admin/sync-all` | 立即触发轮询，同步全部开启自动同步的 App |
-| **版本管理与补录** | `POST` | `/admin/apps/:appId/versions` | **手动补录历史版本**（支持本地安装包上传或填写外部 URL） |
-| | `PATCH` | `/admin/apps/:appId/versions/:versionCode` | **修改版本策略（开关强制更新 / 设定最低兼容版本 / 编辑更新说明）** |
+| | `GET` | `/admin/apps/:appId/preview-release` | **实时检测预览 GitHub Release 资产匹配与元数据清单** |
+| **版本管理与控制** | `POST` | `/admin/apps/:appId/versions` | **手动补录历史版本**（支持本地安装包上传或填写外部 URL） |
+| | `PATCH` | `/admin/apps/:appId/versions/:versionCode` | **修改版本策略（灰度百分比 / 发布通道 / 强制更新 / 兼容版本 / 日志）** |
 | | `DELETE` | `/admin/apps/:appId/versions/:versionCode` | **物理删除指定版本**（级联删除关联差分包并重新计算最新版） |
+| | `POST` | `/admin/apps/:appId/versions/:versionCode/rollback` | **一键回滚为此版本**（设为最新生效版，刷新 `latest`，触发告警通知） |
 | **差分补丁** | `GET` | `/admin/apps/:appId/patches` | 获取版本差分覆盖矩阵 |
 | | `POST` | `/admin/apps/:appId/patches/generate` | 手动为指定的两个版本生成单个补丁 |
 | | `POST` | `/admin/apps/:appId/patches/generate-all` | 一键补齐目标版本相对于所有更早历史版本的缺失差分包 |
+| | `POST` | `/admin/apps/:appId/patches/upload` | **手动上传外部准备好的 `.patch` 文件** |
+| **统计与监控** | `GET` | `/admin/stats/overview` | 全局统计数据（总 App 数、总检查/下载次数、今日活跃设备 UV） |
+| | `GET` | `/admin/apps/:appId/stats` | 单个 App 统计（检查/下载量、近 7 天趋势、设备 UV、**版本覆盖率分布**） |
+| **Webhook 告警** | `POST` | `/admin/apps/:appId/webhook/test` | **向 App 配置的 Webhook 发送一条测试消息** |
 
 ---
 
@@ -754,7 +805,21 @@ curl -X DELETE "https://hub.example.com/admin/apps/android-main/versions/161" \
 | `GITHUB_TOKEN` | 否 | - | 全局 GitHub Personal Access Token（访问公开仓库不需要，私有仓库需配置） |
 | `GITHUB_TOKEN_<APPID>` | 否 | - | 单独为某个 App 配置独立的 Token，如 `GITHUB_TOKEN_ANDROID_MAIN=ghp_xxx` |
 | `DB_PATH` | 否 | `data/hub.db` | SQLite 数据库存储路径 |
-| `FILES_DIR` | 否 | `data/files` | 安装包和补丁文件落盘存储目录 |
+| `FILES_DIR` | 否 | `data/files` | 本地安装包和补丁文件存储目录 |
+| **存储配置 (S3 / 对象存储)** | | | |
+| `STORAGE_TYPE` | 否 | `local` | 存储驱动类型：`local`（本地磁盘）或 `s3`（AWS S3 / R2 / MinIO / OSS / COS） |
+| `S3_ENDPOINT` | 否 | 留空 | S3 兼容服务节点地址（如 `https://s3.us-east-1.amazonaws.com` 或 MinIO 节点） |
+| `S3_REGION` | 否 | `auto` | 存储桶区域（如 `us-east-1`、`auto`） |
+| `S3_BUCKET` | 否 | 留空 | 存储桶名称 |
+| `S3_ACCESS_KEY` | 否 | 留空 | 访问凭据 Access Key ID |
+| `S3_SECRET_KEY` | 否 | 留空 | 访问凭据 Secret Access Key |
+| `S3_PUBLIC_DOMAIN` | 否 | 留空 | 对象存储绑定的公开 CDN 域名（公开 App 可选） |
+| **高并发与性能流控** | | | |
+| `MAX_CONCURRENT_BSDIFF` | 否 | `2` | 允许同时执行二进制差分的最大进程数，防止 CPU 耗尽 |
+| `RATE_LIMIT_PUBLIC` | 否 | `60` | 公共 API（版本检查、Plist、Electron）每分钟每 IP 限流次数 |
+| `RATE_LIMIT_DOWNLOADS` | 否 | `30` | 安装包与 Patch 直接下载每分钟每 IP 限流次数 |
+| `ENABLE_NGINX_ACCEL` | 否 | `false` | 是否开启 Nginx `X-Accel-Redirect` 内网静态文件加速 |
+| `NGINX_INTERNAL_PATH_PREFIX` | 否 | `/internal-files` | Nginx 内部保护静态路径前缀 |
 
 ---
 

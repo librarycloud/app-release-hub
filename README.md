@@ -18,7 +18,7 @@
 
 ## 🌟 系统特性
 
-- 📦 **多应用与多平台统管**：单套系统统一管理 Android (`.apk`/`.aab`)、Windows (`.exe`/`.msi`)、macOS (`.dmg`/`.pkg`)、Linux (`.AppImage`/`.deb`)、iOS (`.ipa`) 等多端多应用。
+- 📦 **多应用与多平台统管**：单套系统统一管理 Android (`.apk`/`.aab`)、Windows (`.exe`/`.msi`)、macOS (`.dmg`/`.pkg`)、Linux (`.AppImage`/`.deb`)、iOS (`.ipa`) 以及 **UniApp 热更新包 (`.wgt`)** 和 **React Native 离线包 (`.zip`)** 等多端多应用。
 - 🔄 **GitHub Release 自动化拉取**：支持公开仓库及私有仓库（按 App 配置独立 Token），一键同步最新发布产物。
 - ⚡ **智能 bsdiff 增量差分补丁**：新版本发布时自动与历史版本生成二进制差分包。用户仅需下载几 MB 的补丁即可原地升级，大幅节省 CDN 带宽与用户等待时间。
 - ☁️ **对象存储支持 (S3 / R2 / MinIO / OSS / COS)**：支持本地磁盘与 S3 兼容存储无缝切换，大文件并发分片上传，下载直出预签名临时重定向，解耦单机网络带宽。
@@ -39,6 +39,7 @@
 - 🍏 **原生生态对接**：
   - **iOS OTA 原生直接安装**：提供 `install.plist` 协议，Safari 点击即刻调用 `itms-services://` 静默安装。
   - **Electron 自动更新标准**：原生兼容 Squirrel.Mac / Auto-Updater 格式，无缝接入桌面端更新。
+  - **跨端热更新包**：原生支持 UniApp (`.wgt`) 与 React Native (`.zip`) 离线增量包，且同样享受底层 bsdiff 差分引擎大幅削减热更体积。
 - 📦 **配置批量导入与导出**：一键导出全量 App 配置为 JSON，支持跨环境极速迁移与灾备同步。
 - 🗄️ **轻量级零外部数据库依赖**：基于 Node.js LTS + Fastify + SQLite (better-sqlite3)，单机或容器秒级部署，开箱即用。
 
@@ -770,6 +771,8 @@ curl -X DELETE "https://hub.example.com/admin/apps/android-main/versions/161" \
 | **macOS (Intel)** | `MyApp-1.0.0-mac-x64.dmg` | `.*-mac-x64\.dmg$` |
 | **Linux (AppImage)** | `MyApp-1.0.0-linux-amd64.AppImage` | `.*\.AppImage$` |
 | **iOS** | `MyApp.ipa` | `.*\.ipa$` |
+| **UniApp 热更新** | `update-1.0.0.wgt` | `.*\.wgt$` |
+| **React Native 热更新** | `bundle-1.0.0.zip` | `.*\.zip$` |
 
 > 系统内置过滤黑名单：自动过滤 `.sha256`、`.md5`、`.blockmap`、`.sig`、`-unaligned.apk`、`uninstall.exe` 等非安装器文件。
 

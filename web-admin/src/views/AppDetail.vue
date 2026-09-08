@@ -39,6 +39,16 @@
           >
             ⚙️ {{ formatPolicyLabel(appInfo?.patchReadinessPolicy) }}
           </el-tag>
+          <el-tag
+            size="small"
+            :type="appInfo?.isPrivate ? 'danger' : 'info'"
+            effect="plain"
+            style="cursor:pointer"
+            title="点击修改私有鉴权设置"
+            @click="openEditDialog"
+          >
+            {{ appInfo?.isPrivate ? '🔒 私有鉴权保护' : '🌐 公开访问' }}
+          </el-tag>
           <span v-if="appInfo?.lastSyncError" class="sub warn">
             ⚠️ {{ appInfo.lastSyncError }}
           </span>
@@ -236,6 +246,8 @@
             <div class="group-title">
               <div class="group-title-main">
                 <el-tag v-if="group.isLatest" type="success" size="small">最新</el-tag>
+                <el-tag v-if="group.channel && group.channel !== 'stable'" type="info" size="small">{{ group.channel }}</el-tag>
+                <el-tag v-if="group.rolloutPercentage !== undefined && group.rolloutPercentage < 100" type="warning" size="small">灰度 {{ group.rolloutPercentage }}%</el-tag>
                 <el-tag v-if="group.forceUpdate" type="danger" size="small">强制更新</el-tag>
                 <strong>{{ group.versionName }}</strong>
                 <span class="vc"> (vc: {{ group.versionCode }})</span>
@@ -301,6 +313,54 @@
                 <el-tooltip content="低于此版本的旧客户端请求此更新时将被标记为强制更新" placement="top">
                   <span class="help-icon">ℹ️</span>
                 </el-tooltip>
+              </div>
+              <div class="ctrl-item">
+                <span class="ctrl-label">灰度比例:</span>
+                <el-slider
+                  v-model="group.rolloutPercentage"
+                  :min="1"
+                  :max="100"
+                  style="width:90px;margin:0 8px;"
+                />
+                <span style="font-size:12px;color:#666;width:36px;">{{ group.rolloutPercentage ?? 100 }}%</span>
+                <el-button
+                  size="small"
+                  type="primary"
+                  plain
+                  :loading="updatingVersion[group.versionCode]"
+                  @click="handleSaveRollout(group)"
+                >
+                  保存
+                </el-button>
+                <el-tooltip content="基于设备 ID 哈希的阶段性灰度比例（1%~100%）" placement="top">
+                  <span class="help-icon">ℹ️</span>
+                </el-tooltip>
+              </div>
+              <div class="ctrl-item">
+                <span class="ctrl-label">发布通道:</span>
+                <el-select
+                  v-model="group.channel"
+                  size="small"
+                  style="width:85px"
+                  filterable
+                  allow-create
+                  default-first-option
+                  placeholder="通道"
+                >
+                  <el-option label="stable" value="stable" />
+                  <el-option label="beta" value="beta" />
+                  <el-option label="alpha" value="alpha" />
+                  <el-option label="nightly" value="nightly" />
+                </el-select>
+                <el-button
+                  size="small"
+                  type="primary"
+                  plain
+                  :loading="updatingVersion[group.versionCode]"
+                  @click="handleSaveChannel(group)"
+                >
+                  保存
+                </el-button>
               </div>
             </div>
 
@@ -1223,6 +1283,32 @@ async function handleSaveMinVersionCode(group) {
     await updateVersion(appId, vCode, { minVersionCode: group.minVersionCode });
     const label = formatMinVersionDisplay(group.minVersionCode);
     ElMessage.success(`v${group.versionName} 最低兼容版本已设为: ${label}`);
+  } catch (e) {
+    ElMessage.error(e?.message || "保存失败");
+  } finally {
+    updatingVersion.value[vCode] = false;
+  }
+}
+
+async function handleSaveRollout(group) {
+  const vCode = group.versionCode;
+  updatingVersion.value[vCode] = true;
+  try {
+    await updateVersion(appId, vCode, { rolloutPercentage: group.rolloutPercentage });
+    ElMessage.success(`v${group.versionName} 灰度比例已更新为: ${group.rolloutPercentage}%`);
+  } catch (e) {
+    ElMessage.error(e?.message || "保存失败");
+  } finally {
+    updatingVersion.value[vCode] = false;
+  }
+}
+
+async function handleSaveChannel(group) {
+  const vCode = group.versionCode;
+  updatingVersion.value[vCode] = true;
+  try {
+    await updateVersion(appId, vCode, { channel: group.channel });
+    ElMessage.success(`v${group.versionName} 发布通道已更新为: ${group.channel}`);
   } catch (e) {
     ElMessage.error(e?.message || "保存失败");
   } finally {

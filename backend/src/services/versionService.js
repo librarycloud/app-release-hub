@@ -307,6 +307,8 @@ export async function getPatchMatrix(appId) {
       sha256: ver.sha256,
       publishedAt: ver.publishedAt,
       releaseNotes: ver.releaseNotes,
+      rolloutPercentage: Number(ver.rolloutPercentage ?? 100),
+      channel: ver.channel || "stable",
       patches: incomingPatches,
       eligibleCount: eligibleOlder.length,
       coveredCount: incomingPatches.length,

@@ -12,6 +12,14 @@
         </div>
         <div class="nav-actions">
           <ThemeToggle />
+          <el-button @click="handleExportConfig">
+            <span class="btn-text-full">📤 导出配置</span>
+            <span class="btn-text-short">导出</span>
+          </el-button>
+          <el-button @click="showImportDialog = true">
+            <span class="btn-text-full">📥 批量导入</span>
+            <span class="btn-text-short">导入</span>
+          </el-button>
           <el-button :loading="syncingAll" :icon="Refresh" @click="doSyncAll">
             <span class="btn-text-full">检查全部更新</span>
             <span class="btn-text-short">检查更新</span>
@@ -58,6 +66,14 @@
             <div class="stat-label">累计下载安装</div>
             <div class="stat-value">{{ globalStats.totalDownloads || 0 }} <span class="stat-unit">次</span></div>
             <div class="stat-sub-text">今日 {{ globalStats.todayDownloads || 0 }} 次</div>
+          </div>
+        </div>
+        <div class="stat-card modern-card">
+          <div class="stat-icon-wrap blue">📱</div>
+          <div class="stat-info">
+            <div class="stat-label">活跃设备 (UV)</div>
+            <div class="stat-value">{{ globalStats.totalDevices || 0 }} <span class="stat-unit">台</span></div>
+            <div class="stat-sub-text">今日活跃 {{ globalStats.todayDevices || 0 }} 台</div>
           </div>
         </div>
         <div class="stat-card modern-card">
@@ -182,6 +198,13 @@
               </el-popconfirm>
               <el-button
                 size="small"
+                text
+                @click.stop="openShare(app)"
+              >
+                🔗 下载页
+              </el-button>
+              <el-button
+                size="small"
                 type="primary"
                 plain
                 @click.stop="$router.push(`/apps/${app.appId}`)"
@@ -291,6 +314,30 @@
         <el-button type="primary" :loading="creating" @click="submitCreate">立即注册</el-button>
       </template>
     </el-dialog>
+
+    <!-- Batch Import Dialog -->
+    <el-dialog v-model="showImportDialog" title="📥 批量导入 App 配置" width="560px">
+      <div style="margin-bottom: 12px; font-size: 13px; color: var(--text-secondary);">
+        支持粘贴 JSON 格式的 App 配置数组，系统将根据 <code>appId</code> 自动更新已存在的应用或创建新应用。
+      </div>
+      <el-input
+        v-model="importJsonText"
+        type="textarea"
+        :rows="12"
+        placeholder='[
+  {
+    "appId": "android-main",
+    "name": "Android 主版",
+    "platform": "android",
+    "githubRepo": "org/repo"
+  }
+]'
+      />
+      <template #footer>
+        <el-button @click="showImportDialog = false">取消</el-button>
+        <el-button type="primary" :loading="importing" @click="submitImportApps">立即解析并导入</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -299,7 +346,7 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { Refresh, Plus } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
-import { listApps, createApp, deleteApp, syncAllApps, clearApiKey, getGlobalStats } from "../api/appHub.js";
+import { listApps, createApp, deleteApp, syncAllApps, clearApiKey, getGlobalStats, exportApps, importApps } from "../api/appHub.js";
 import ThemeToggle from "../components/ThemeToggle.vue";
 import {
   getBrowserTimeZone,
@@ -323,6 +370,8 @@ const globalStats = ref({
   totalDownloads: 0,
   todayChecks: 0,
   todayDownloads: 0,
+  totalDevices: 0,
+  todayDevices: 0,
 });
 const loading = ref(false);
 const syncingAll = ref(false);
@@ -330,6 +379,57 @@ const showCreate = ref(false);
 const creating = ref(false);
 const searchQuery = ref("");
 const currentPlatform = ref("all");
+
+const showImportDialog = ref(false);
+const importJsonText = ref("");
+const importing = ref(false);
+
+function openShare(app) {
+  window.open(`/share/${app.appId}`, "_blank");
+}
+
+async function handleExportConfig() {
+  try {
+    const res = await exportApps();
+    const jsonStr = JSON.stringify(res.data, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `app-release-hub-config-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    ElMessage.success("配置已导出为 JSON 文件");
+  } catch (err) {
+    ElMessage.error(err?.message || "导出失败");
+  }
+}
+
+async function submitImportApps() {
+  if (!importJsonText.value.trim()) {
+    return ElMessage.warning("请粘贴 JSON 配置内容");
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(importJsonText.value.trim());
+    if (!Array.isArray(parsed)) throw new Error("根节点必须是 JSON 数组");
+  } catch (e) {
+    return ElMessage.error(`JSON 格式解析失败: ${e.message}`);
+  }
+
+  importing.value = true;
+  try {
+    const res = await importApps(parsed);
+    ElMessage.success(res.message || "导入成功");
+    showImportDialog.value = false;
+    importJsonText.value = "";
+    await load();
+  } catch (err) {
+    ElMessage.error(err?.message || "导入失败");
+  } finally {
+    importing.value = false;
+  }
+}
 
 const form = ref({
   appId: "",

@@ -17,6 +17,10 @@ import {
   getAppStatsController,
   uploadPatchController,
   testWebhookController,
+  exportAppsController,
+  importAppsController,
+  previewReleaseController,
+  rollbackVersionController,
 } from "../controllers/appController.js";
 
 const auth = { preHandler: [apiKeyAuth], config: { rateLimit: false } };
@@ -26,21 +30,25 @@ export default async function adminRoutes(fastify) {
   fastify.get("/admin/stats/overview", auth, getGlobalStatsController);
   fastify.get("/admin/apps/:appId/stats", auth, getAppStatsController);
 
-  // App registry
+  // App registry & Batch config
   fastify.get("/admin/apps", auth, listAppsController);
   fastify.post("/admin/apps", auth, createAppController);
   fastify.patch("/admin/apps/:appId", auth, updateAppController);
   fastify.delete("/admin/apps/:appId", auth, deleteAppController);
+  fastify.get("/admin/apps/export", auth, exportAppsController);
+  fastify.post("/admin/apps/import", auth, importAppsController);
 
   // Release management
   fastify.post("/admin/sync-all", auth, syncAllAppsController);
   fastify.post("/admin/apps/:appId/sync", auth, syncReleaseController);
   fastify.post("/admin/apps/:appId/sync-history", auth, syncHistoryReleasesController);
+  fastify.get("/admin/apps/:appId/preview-release", auth, previewReleaseController);
 
   // Version management
   fastify.post("/admin/apps/:appId/versions", auth, createVersionController);
   fastify.patch("/admin/apps/:appId/versions/:versionCode", auth, updateVersionController);
   fastify.delete("/admin/apps/:appId/versions/:versionCode", auth, deleteVersionController);
+  fastify.post("/admin/apps/:appId/versions/:versionCode/rollback", auth, rollbackVersionController);
 
   // Patch matrix and generation
   fastify.get("/admin/apps/:appId/patches", auth, patchMatrixController);

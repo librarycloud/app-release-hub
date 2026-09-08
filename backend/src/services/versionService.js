@@ -107,7 +107,10 @@ function isVersionQualifying(ver, deviceId) {
 
 export async function getVersionForClient(appId, { currentVersionCode, policy, channel = "stable", deviceId = "" } = {}) {
   const historyRows = getVersionHistory(appId);
-  const latestRow = historyRows.find(r => r.channel === channel && isVersionQualifying(parseVersion(r), deviceId));
+  const explicitLatest = historyRows.find(r => r.is_latest === 1 && (r.channel === channel || (!r.channel && channel === "stable")));
+  const maxAllowedCode = explicitLatest ? explicitLatest.version_code : Infinity;
+  const eligibleRows = historyRows.filter(r => r.version_code <= maxAllowedCode && (r.channel === channel || (!r.channel && channel === "stable")));
+  const latestRow = eligibleRows.find(r => isVersionQualifying(parseVersion(r), deviceId));
   if (!latestRow) return null; // No qualifying version found
 
   const appRow = getApp(appId);

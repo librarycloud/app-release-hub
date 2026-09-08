@@ -39,6 +39,12 @@ export const createVersion = (appId, data, isMultipart = false) =>
   http.post(`/admin/apps/${appId}/versions`, data, isMultipart ? { headers: { "Content-Type": "multipart/form-data" } } : {});
 export const updateVersion = (appId, versionCode, data) => http.patch(`/admin/apps/${appId}/versions/${versionCode}`, data);
 export const deleteVersion = (appId, versionCode) => http.delete(`/admin/apps/${appId}/versions/${versionCode}`);
+export const rollbackVersion = (appId, versionCode) => http.post(`/admin/apps/${appId}/versions/${versionCode}/rollback`);
+export const previewRelease = (appId) => http.get(`/admin/apps/${appId}/preview-release`);
+
+// ─── Batch Config ────────────────────────────────────────────────────────────
+export const exportApps = () => http.get("/admin/apps/export");
+export const importApps = (appsList) => http.post("/admin/apps/import", appsList);
 
 // ─── Patches ─────────────────────────────────────────────────────────────────
 export const getPatchMatrix = (appId) => http.get(`/admin/apps/${appId}/patches`);

@@ -405,6 +405,8 @@ export function getAppStats(appId) {
     ORDER BY date ASC
   `).all(appId);
 
+  const devStats = getAppDeviceStats(appId);
+
   return {
     appId,
     totalChecks: Number(app.check_count || 0),
@@ -413,6 +415,8 @@ export function getAppStats(appId) {
     todayDownloads: Number((todayRow.full_download_count || 0) + (todayRow.patch_download_count || 0)),
     totalFullDownloads: Number(totals?.total_full_downloads || 0),
     totalPatchDownloads: Number(totals?.total_patch_downloads || 0),
+    totalDevices: devStats.totalDevices,
+    todayDevices: devStats.todayDevices,
     recentDays,
   };
 }
@@ -439,6 +443,8 @@ export function getGlobalStats() {
     WHERE date = ?
   `).get(today);
 
+  const devAgg = getGlobalDeviceStats();
+
   return {
     totalApps: Number(appAgg?.total_apps || 0),
     autoSyncApps: Number(appAgg?.auto_sync_apps || 0),
@@ -448,6 +454,167 @@ export function getGlobalStats() {
     todayDownloads: Number(todayAgg?.today_downloads || 0),
     todayFullDownloads: Number(todayAgg?.today_full_downloads || 0),
     todayPatchDownloads: Number(todayAgg?.today_patch_downloads || 0),
+    totalDevices: devAgg.totalDevices,
+    todayDevices: devAgg.todayDevices,
   };
+}
+
+// ─── Device Tracking ─────────────────────────────────────────────────────────
+
+export function recordDeviceActive(appId, deviceId, { platform = "", versionCode = null } = {}) {
+  if (!appId || !deviceId) return;
+  const devId = String(deviceId).trim();
+  if (!devId) return;
+
+  db.prepare(`
+    INSERT INTO app_devices (app_id, device_id, platform, current_version_code, last_seen_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(app_id, device_id) DO UPDATE SET
+      platform = CASE WHEN ? != '' THEN ? ELSE platform END,
+      current_version_code = CASE WHEN ? IS NOT NULL THEN ? ELSE current_version_code END,
+      last_seen_at = datetime('now')
+  `).run(
+    appId,
+    devId,
+    platform,
+    versionCode,
+    platform,
+    platform,
+    versionCode,
+    versionCode
+  );
+}
+
+export function getAppDeviceStats(appId) {
+  const row = db.prepare(`
+    SELECT 
+      COUNT(*) as total_devices,
+      SUM(CASE WHEN date(last_seen_at) = date('now') THEN 1 ELSE 0 END) as today_devices
+    FROM app_devices
+    WHERE app_id = ?
+  `).get(appId);
+
+  return {
+    totalDevices: Number(row?.total_devices || 0),
+    todayDevices: Number(row?.today_devices || 0),
+  };
+}
+
+export function getGlobalDeviceStats() {
+  const row = db.prepare(`
+    SELECT 
+      COUNT(DISTINCT device_id) as total_devices,
+      COUNT(DISTINCT CASE WHEN date(last_seen_at) = date('now') THEN device_id ELSE NULL END) as today_devices
+    FROM app_devices
+  `).get();
+
+  return {
+    totalDevices: Number(row?.total_devices || 0),
+    todayDevices: Number(row?.today_devices || 0),
+  };
+}
+
+// ─── Version Rollback ────────────────────────────────────────────────────────
+
+export function rollbackVersionToLatest(appId, targetVersionCode) {
+  const vCode = Number(targetVersionCode);
+  const targetVer = getVersion(appId, vCode);
+  if (!targetVer) throw new Error(`目标版本 ${vCode} 不存在`);
+
+  const runTx = db.transaction(() => {
+    db.prepare("UPDATE versions SET is_latest = 0 WHERE app_id = ?").run(appId);
+    db.prepare("UPDATE versions SET is_latest = 1 WHERE app_id = ? AND version_code = ?").run(appId, vCode);
+  });
+  runTx();
+
+  return getVersion(appId, vCode);
+}
+
+// ─── App Config Batch Export / Import ────────────────────────────────────────
+
+export function exportAllAppsConfig() {
+  const rows = db.prepare(`
+    SELECT 
+      app_id, name, platform, github_repo, github_api_url, 
+      auto_sync, auto_sync_interval_minutes, asset_pattern, 
+      patch_readiness_policy, is_private, client_token, 
+      max_retained_versions, webhook_url, webhook_type
+    FROM apps
+    ORDER BY created_at ASC
+  `).all();
+
+  return rows.map((r) => ({
+    appId: r.app_id,
+    name: r.name,
+    platform: r.platform,
+    githubRepo: r.github_repo,
+    githubApiUrl: r.github_api_url,
+    autoSync: r.auto_sync === 1,
+    autoSyncIntervalMinutes: Number(r.auto_sync_interval_minutes || 60),
+    assetPattern: r.asset_pattern || "",
+    patchReadinessPolicy: r.patch_readiness_policy || "hide_download_link",
+    isPrivate: r.is_private === 1,
+    clientToken: r.client_token || "",
+    maxRetainedVersions: Number(r.max_retained_versions || 0),
+    webhookUrl: r.webhook_url || "",
+    webhookType: r.webhook_type || "generic",
+  }));
+}
+
+export function importAppsConfig(appsList) {
+  if (!Array.isArray(appsList)) throw new Error("导入内容必须是 App 配置数组");
+  let createdCount = 0;
+  let updatedCount = 0;
+  const errors = [];
+
+  for (const item of appsList) {
+    if (!item.appId || !item.name) {
+      errors.push({ appId: item.appId || "unknown", error: "appId 和 name 不能为空" });
+      continue;
+    }
+    try {
+      const existing = getApp(item.appId);
+      if (existing) {
+        updateApp(item.appId, {
+          name: item.name,
+          platform: item.platform || existing.platform,
+          github_repo: item.githubRepo !== undefined ? item.githubRepo : existing.github_repo,
+          github_api_url: item.githubApiUrl !== undefined ? item.githubApiUrl : existing.github_api_url,
+          auto_sync: item.autoSync !== undefined ? item.autoSync : existing.auto_sync === 1,
+          auto_sync_interval_minutes: item.autoSyncIntervalMinutes !== undefined ? item.autoSyncIntervalMinutes : existing.auto_sync_interval_minutes,
+          asset_pattern: item.assetPattern !== undefined ? item.assetPattern : existing.asset_pattern,
+          patch_readiness_policy: item.patchReadinessPolicy !== undefined ? item.patchReadinessPolicy : existing.patch_readiness_policy,
+          is_private: item.isPrivate !== undefined ? item.isPrivate : existing.is_private === 1,
+          client_token: item.clientToken !== undefined ? item.clientToken : existing.client_token,
+          max_retained_versions: item.maxRetainedVersions !== undefined ? item.maxRetainedVersions : existing.max_retained_versions,
+          webhook_url: item.webhookUrl !== undefined ? item.webhookUrl : existing.webhook_url,
+          webhook_type: item.webhookType !== undefined ? item.webhookType : existing.webhook_type,
+        });
+        updatedCount++;
+      } else {
+        insertApp({
+          appId: item.appId,
+          name: item.name,
+          platform: item.platform || "android",
+          githubRepo: item.githubRepo || "",
+          githubApiUrl: item.githubApiUrl || "https://api.github.com",
+          autoSync: Boolean(item.autoSync),
+          autoSyncIntervalMinutes: Number(item.autoSyncIntervalMinutes) || 60,
+          assetPattern: item.assetPattern || "",
+          patchReadinessPolicy: item.patchReadinessPolicy || "hide_download_link",
+          isPrivate: Boolean(item.isPrivate),
+          clientToken: item.clientToken || "",
+          maxRetainedVersions: Number(item.maxRetainedVersions) || 0,
+          webhookUrl: item.webhookUrl || "",
+          webhookType: item.webhookType || "generic",
+        });
+        createdCount++;
+      }
+    } catch (err) {
+      errors.push({ appId: item.appId, error: err.message });
+    }
+  }
+
+  return { total: appsList.length, createdCount, updatedCount, errors };
 }
 

@@ -32,6 +32,11 @@ export async function sendWebhookNotification(appId, eventType, data) {
       const title = `⚠️ ${appName} 同步异常`;
       const contentStr = `发生时间: ${new Date().toLocaleString()}\n错误详情: ${data.error}`;
       await pushMessage(url, type, title, contentStr);
+    } else if (eventType === "rollback") {
+      const { versionName, versionCode } = data;
+      const title = `⏪ ${appName} 版本回滚通知`;
+      const contentStr = `系统已将当前生效版本紧急回滚至:\nv${versionName} (Build ${versionCode})\n回滚时间: ${new Date().toLocaleString()}`;
+      await pushMessage(url, type, title, contentStr);
     } else if (eventType === "test") {
       await pushMessage(url, type, `✅ ${appName} Webhook 测试`, "这是一条测试消息，您的 Webhook 配置正常。");
     }

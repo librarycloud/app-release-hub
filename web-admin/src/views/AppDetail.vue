@@ -70,6 +70,9 @@
             {{ formatInterval(appInfo.autoSyncIntervalMinutes) }} ✏️
           </el-tag>
         </div>
+        <el-button @click="openSharePage">
+          🔗 公开下载页
+        </el-button>
         <el-button @click="openEditDialog">
           ⚙️ 配置
         </el-button>
@@ -80,6 +83,9 @@
         <el-button @click="openManualVersionDialog">
           <span class="btn-text-full">➕ 补录旧版本</span>
           <span class="btn-text-short">➕ 补录版本</span>
+        </el-button>
+        <el-button @click="openPreviewDialog">
+          🔍 预览 Release
         </el-button>
         <el-button type="primary" :loading="syncing" @click="doSync">
           🔄 同步最新 Release
@@ -120,6 +126,14 @@
             <div class="stat-mini-label">差分补丁下载</div>
             <div class="stat-mini-val">{{ appStats.totalPatchDownloads || 0 }} <span class="stat-mini-unit">次</span></div>
             <div class="stat-mini-sub">增量补丁下载</div>
+          </div>
+        </div>
+        <div class="stat-mini-card">
+          <div class="stat-mini-icon cyan">📱</div>
+          <div class="stat-mini-body">
+            <div class="stat-mini-label">活跃设备 (UV)</div>
+            <div class="stat-mini-val">{{ appStats.totalDevices || 0 }} <span class="stat-mini-unit">台</span></div>
+            <div class="stat-mini-sub">今日活跃 {{ appStats.todayDevices || 0 }} 台</div>
           </div>
         </div>
       </div>
@@ -364,16 +378,28 @@
               </div>
             </div>
 
-            <el-button
-              type="danger"
-              size="small"
-              plain
-              class="del-ver-btn"
-              :loading="deletingVersion[group.versionCode]"
-              @click="handleDeleteVersion(group)"
-            >
-              🗑️ 删除此版本
-            </el-button>
+            <div class="version-action-btns">
+              <el-button
+                v-if="!group.isLatest"
+                type="warning"
+                size="small"
+                plain
+                :loading="rollingBackVersion[group.versionCode]"
+                @click="handleRollbackVersion(group)"
+              >
+                ⏪ 回滚为此版本
+              </el-button>
+              <el-button
+                type="danger"
+                size="small"
+                plain
+                class="del-ver-btn"
+                :loading="deletingVersion[group.versionCode]"
+                @click="handleDeleteVersion(group)"
+              >
+                🗑️ 删除此版本
+              </el-button>
+            </div>
           </div>
 
           <!-- Full download info -->
@@ -879,6 +905,73 @@
       </template>
     </el-dialog>
 
+    <!-- GitHub Release Preview Dialog -->
+    <el-dialog v-model="showPreviewDialog" title="🔍 GitHub Release 资产匹配预览" width="620px">
+      <div v-loading="previewLoading" style="min-height: 160px;">
+        <div v-if="previewError" style="padding: 12px 0;">
+          <el-alert :title="previewError" type="error" show-icon :closable="false" />
+        </div>
+        <div v-else-if="previewData" class="preview-body">
+          <div class="preview-item">
+            <span class="preview-lbl">Release 标题:</span>
+            <span class="preview-val">
+              <strong>{{ previewData.release.name || previewData.release.tagName }}</strong>
+              <el-tag size="small" type="info" style="margin-left: 8px">{{ previewData.release.tagName }}</el-tag>
+            </span>
+          </div>
+
+          <div class="preview-item">
+            <span class="preview-lbl">元数据清单:</span>
+            <span class="preview-val">
+              <span v-if="previewData.metaAsset" style="color: #67c23a">✅ 已找到 {{ previewData.metaAsset.name }}</span>
+              <span v-else style="color: #e6a23c">⚠️ 未包含 app-version.json（将使用启发式推断）</span>
+              <div v-if="previewData.metadata" style="margin-top: 4px; font-size: 13px; color: #666;">
+                解析版本: v{{ previewData.metadata.versionName }} (Build {{ previewData.metadata.versionCode }})
+              </div>
+            </span>
+          </div>
+
+          <div class="preview-item">
+            <span class="preview-lbl">安装包匹配:</span>
+            <div class="preview-val">
+              <div v-if="previewData.matchedBinaryAsset" style="color: #67c23a; font-weight: 600;">
+                🎯 匹配成功: {{ previewData.matchedBinaryAsset.name }} ({{ formatSize(previewData.matchedBinaryAsset.size) }})
+              </div>
+              <div v-else style="color: #f56c6c; font-weight: 600;">
+                ❌ 未匹配到符合平台 [{{ previewData.platform }}] 的安装包！
+              </div>
+            </div>
+          </div>
+
+          <div class="preview-item full">
+            <span class="preview-lbl">Release 所有资产 ({{ previewData.allAssets.length }} 个):</span>
+            <div class="preview-asset-tags">
+              <el-tag
+                v-for="a in previewData.allAssets"
+                :key="a.name"
+                size="small"
+                :type="a.name === previewData.matchedBinaryAsset?.name ? 'success' : 'info'"
+                style="margin: 3px;"
+              >
+                {{ a.name }} ({{ formatSize(a.size) }})
+              </el-tag>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="showPreviewDialog = false">关闭</el-button>
+        <el-button
+          v-if="previewData?.isMatchSuccess"
+          type="primary"
+          :loading="syncing"
+          @click="doSyncFromPreview"
+        >
+          确认无误，立即同步
+        </el-button>
+      </template>
+    </el-dialog>
+
 </template>
 
 <script setup>
@@ -905,6 +998,8 @@ import {
   generatePatch,
   updateVersion,
   deleteVersion,
+  rollbackVersion,
+  previewRelease,
   getAppStats,
 } from "../api/appHub.js";
 
@@ -1059,6 +1154,11 @@ function scrollToVersion(versionCode) {
 const generatingAll = ref({});
 const updatingVersion = ref({});
 const deletingVersion = ref({});
+const rollingBackVersion = ref({});
+const showPreviewDialog = ref(false);
+const previewLoading = ref(false);
+const previewData = ref(null);
+const previewError = ref("");
 const showEditNotesDialog = ref(false);
 const currentEditGroup = ref(null);
 const editNotesContent = ref("");
@@ -1343,6 +1443,59 @@ async function handleDeleteVersion(group) {
     ElMessage.error(e?.message || "删除版本失败");
   } finally {
     deletingVersion.value[vCode] = false;
+  }
+}
+
+function openSharePage() {
+  const shareUrl = `/share/${appId}`;
+  window.open(shareUrl, "_blank");
+}
+
+async function openPreviewDialog() {
+  showPreviewDialog.value = true;
+  previewLoading.value = true;
+  previewError.value = "";
+  previewData.value = null;
+  try {
+    const res = await previewRelease(appId);
+    previewData.value = res.data;
+  } catch (err) {
+    previewError.value = err?.message || "预览 Release 失败";
+  } finally {
+    previewLoading.value = false;
+  }
+}
+
+async function doSyncFromPreview() {
+  showPreviewDialog.value = false;
+  await doSync();
+}
+
+async function handleRollbackVersion(group) {
+  const vCode = group.versionCode;
+  try {
+    await ElMessageBox.confirm(
+      `确定要将版本 v${group.versionName} (vc: ${vCode}) 设为当前最新生效版本吗？\n回滚后，客户端检查更新将以该版本为准。`,
+      "版本回滚确认",
+      {
+        confirmButtonText: "确定回滚",
+        cancelButtonText: "取消",
+        type: "warning",
+      }
+    );
+  } catch {
+    return;
+  }
+
+  rollingBackVersion.value[vCode] = true;
+  try {
+    await rollbackVersion(appId, vCode);
+    ElMessage.success(`已成功回滚至版本 v${group.versionName}`);
+    await load();
+  } catch (e) {
+    ElMessage.error(e?.message || "回滚失败");
+  } finally {
+    rollingBackVersion.value[vCode] = false;
   }
 }
 
@@ -2777,6 +2930,39 @@ onUnmounted(() => {
     font-size: 12px !important;
     padding: 0 4px !important;
   }
+}
+
+.preview-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.preview-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+}
+
+.preview-lbl {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.preview-val {
+  font-size: 14px;
+}
+
+.preview-asset-tags {
+  display: flex;
+  flex-wrap: wrap;
+  max-height: 150px;
+  overflow-y: auto;
 }
 </style>
 

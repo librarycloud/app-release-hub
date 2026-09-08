@@ -72,11 +72,25 @@ export function initSchema() {
       FOREIGN KEY(app_id) REFERENCES apps(app_id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS app_devices (
+      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+      app_id               TEXT NOT NULL,
+      device_id            TEXT NOT NULL,
+      platform             TEXT NOT NULL DEFAULT '',
+      current_version_code INTEGER,
+      last_seen_at         TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at           TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(app_id, device_id),
+      FOREIGN KEY(app_id) REFERENCES apps(app_id) ON DELETE CASCADE
+    );
+
     CREATE INDEX IF NOT EXISTS idx_versions_app_id ON versions(app_id);
     CREATE INDEX IF NOT EXISTS idx_versions_latest ON versions(app_id, is_latest);
     CREATE INDEX IF NOT EXISTS idx_patches_app_target ON patches(app_id, target_version_code);
     CREATE INDEX IF NOT EXISTS idx_patches_lookup ON patches(app_id, from_version_code, target_version_code);
     CREATE INDEX IF NOT EXISTS idx_daily_stats_app_date ON app_daily_stats(app_id, date);
+    CREATE INDEX IF NOT EXISTS idx_devices_app ON app_devices(app_id);
+    CREATE INDEX IF NOT EXISTS idx_devices_seen ON app_devices(last_seen_at);
   `);
 
   // Migrate existing tables if missing new columns

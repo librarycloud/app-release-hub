@@ -3,6 +3,7 @@ import { getApiKey } from "../api/appHub.js";
 
 const routes = [
   { path: "/login", component: () => import("../views/Login.vue"), meta: { public: true } },
+  { path: "/share/:appId", component: () => import("../views/ShareApp.vue"), meta: { public: true } },
   { path: "/", component: () => import("../views/AppList.vue") },
   { path: "/apps/:appId", component: () => import("../views/AppDetail.vue") },
 ];

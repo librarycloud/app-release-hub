@@ -4,13 +4,16 @@ import { pipeline } from "node:stream/promises";
 import path from "node:path";
 import { config } from "../config.js";
 import {
-  getApp, recordSyncResult, recordAppCheck, recordReleaseDownload, recordPatchDownload, getAppStats, getGlobalStats
+  getApp, recordSyncResult, recordAppCheck, recordReleaseDownload, recordPatchDownload, 
+  getAppStats, getGlobalStats, recordDeviceActive, exportAllAppsConfig, importAppsConfig
 } from "../services/storageAdapter.js";
 import {
   getAllApps, getAppById, registerApp, updateAppConfig, removeApp
 } from "../services/appRegistryService.js";
 import {
-  syncLatestRelease, syncHistoricalReleases, generatePatchBetweenVersions, generateAllMissingPatchesForVersion, deleteReleaseVersion, createManualVersion
+  syncLatestRelease, syncHistoricalReleases, generatePatchBetweenVersions, 
+  generateAllMissingPatchesForVersion, deleteReleaseVersion, createManualVersion,
+  previewLatestRelease, rollbackToVersion
 } from "../services/releaseService.js";
 import { getVersionForClient, getPatchMatrix, updateVersionConfig } from "../services/versionService.js";
 import { getDownloadUrl, getFileMeta, saveFile } from "../services/storageProvider.js";
@@ -54,7 +57,62 @@ export async function clientVersionController(request, reply) {
   const policy = request.query.policy;
   const channel = request.query.channel || "stable";
   const deviceId = request.query.deviceId || request.headers["x-device-id"] || "";
+
+  if (deviceId) {
+    try {
+      recordDeviceActive(appId, deviceId, {
+        platform: app.platform,
+        versionCode: Number(currentVersionCode) || null,
+      });
+    } catch {}
+  }
+
   return ok(reply, await getVersionForClient(appId, { currentVersionCode, policy, channel, deviceId }));
+}
+
+export async function getShareInfoController(request, reply) {
+  const { appId } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+
+  if (app.isPrivate && !validateClientToken(app, request)) {
+    return reply.send({
+      code: 403,
+      message: "该 App 已开启私有保护，请输入访问 Token",
+      data: {
+        isPrivate: true,
+        requireAuth: true,
+        appId: app.appId,
+        name: app.name,
+        platform: app.platform,
+      },
+    });
+  }
+
+  const channel = request.query.channel || "stable";
+  const versionData = await getVersionForClient(appId, { channel, policy: "fallback_full" });
+
+  const tokenParam = app.isPrivate && app.clientToken ? `?token=${encodeURIComponent(app.clientToken)}` : "";
+  const iosPlistUrl = app.platform === "ios" ? `/api/apps/${appId}/install.plist${tokenParam}` : null;
+
+  return ok(reply, {
+    appId: app.appId,
+    name: app.name,
+    platform: app.platform,
+    isPrivate: app.isPrivate,
+    channel,
+    hasRelease: Boolean(versionData),
+    version: versionData ? {
+      versionName: versionData.versionName,
+      versionCode: versionData.versionCode,
+      size: versionData.size || versionData.fallbackSize || 0,
+      sha256: versionData.sha256 || versionData.targetApkSha256 || "",
+      publishedAt: versionData.publishedAt,
+      releaseNotes: versionData.releaseNotes || [],
+      downloadUrl: (versionData.downloadUrl || versionData.fallbackUrl || "") + (tokenParam && !versionData.downloadUrl?.includes("token=") ? (versionData.downloadUrl?.includes("?") ? `&token=${encodeURIComponent(app.clientToken)}` : tokenParam) : ""),
+      iosPlistUrl,
+    } : null,
+  });
 }
 
 async function serveFileWithRange(request, reply, appId, subDir, filename, recordStatFn) {
@@ -389,4 +447,44 @@ export async function getAppStatsController(request, reply) {
   const app = await requireApp(appId, reply);
   if (!app) return;
   return ok(reply, getAppStats(appId));
+}
+
+export async function previewReleaseController(request, reply) {
+  const { appId } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+
+  try {
+    const preview = await previewLatestRelease(appId);
+    return ok(reply, preview);
+  } catch (err) {
+    return reply.code(400).send({ code: 400, message: err.message });
+  }
+}
+
+export async function rollbackVersionController(request, reply) {
+  const { appId, versionCode } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+
+  try {
+    const result = await rollbackToVersion(appId, versionCode);
+    return ok(reply, result, `已成功将版本 v${result.versionName} 设为最新生效版本`);
+  } catch (err) {
+    return reply.code(400).send({ code: 400, message: err.message });
+  }
+}
+
+export async function exportAppsController(_request, reply) {
+  const apps = exportAllAppsConfig();
+  return ok(reply, apps);
+}
+
+export async function importAppsController(request, reply) {
+  const appsList = request.body;
+  if (!Array.isArray(appsList)) {
+    return reply.code(400).send({ code: 400, message: "请求体必须为 App 配置数组" });
+  }
+  const result = importAppsConfig(appsList);
+  return ok(reply, result, `批量导入完成: 新增 ${result.createdCount} 个，更新 ${result.updatedCount} 个`);
 }

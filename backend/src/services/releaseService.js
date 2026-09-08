@@ -15,6 +15,7 @@ import {
   getPatchesForTarget,
   getAllPatches,
   upsertPatch,
+  rollbackVersionToLatest,
 } from "./storageAdapter.js";
 import { checkBsdiffAvailable, computeFileSha256, generatePatch } from "./patchService.js";
 import { getFileExt, findMetadataAsset, findBinaryAsset } from "./assetResolver.js";
@@ -580,4 +581,102 @@ export async function createManualVersion(appId, {
   await pruneOldVersions(appId).catch(console.error);
 
   return { ...formatVersion(getVersion(appId, vCode)), isLatest: latestCode === vCode };
+}
+
+export async function previewLatestRelease(appId) {
+  const appRow = getApp(appId);
+  if (!appRow) throw new Error(`App "${appId}" 不存在`);
+  if (!appRow.github_repo) throw new Error("该 App 尚未配置 githubRepo");
+
+  const cleanRepo = cleanGithubRepo(appRow.github_repo);
+  const token = config.resolveGithubToken(appId);
+  const platform = appRow.platform || "android";
+  const base = String(appRow.github_api_url || "https://api.github.com").replace(/\/$/, "");
+  const headers = buildHeaders(token);
+
+  const res = await fetchWithTimeout(`${base}/repos/${cleanRepo}/releases?per_page=1`, { headers }, metadataTimeoutMs);
+  if (!res.ok) {
+    throw new Error(`GitHub API 请求失败: HTTP ${res.status}`);
+  }
+  const list = await res.json();
+  if (!Array.isArray(list) || list.length === 0) {
+    throw new Error(`GitHub 仓库 "${cleanRepo}" 中尚未发布任何 Release`);
+  }
+  const release = list[0];
+  const assets = release.assets || [];
+
+  // Check metadata
+  const metaAsset = findMetadataAsset(assets, platform);
+  let metadata = null;
+  let metadataError = null;
+  if (metaAsset) {
+    try {
+      const metaRes = await fetchWithTimeout(metaAsset.browser_download_url, { headers }, metadataTimeoutMs);
+      if (metaRes.ok) {
+        metadata = await metaRes.json();
+      } else {
+        metadataError = `元数据下载失败: HTTP ${metaRes.status}`;
+      }
+    } catch (err) {
+      metadataError = `元数据解析失败: ${err.message}`;
+    }
+  }
+
+  // Check binary asset
+  const preferredName = metadata?.fileName || metadata?.assetName || "";
+  const fileAsset = findBinaryAsset(assets, {
+    platform,
+    assetPattern: appRow.asset_pattern || "",
+    preferredFileName: preferredName,
+  });
+
+  const allAssetNames = assets.map((a) => ({ name: a.name, size: a.size, downloadUrl: a.browser_download_url }));
+
+  return {
+    repo: cleanRepo,
+    release: {
+      tagName: release.tag_name,
+      name: release.name || release.tag_name,
+      publishedAt: release.published_at,
+      htmlUrl: release.html_url,
+      body: release.body || "",
+    },
+    metaAsset: metaAsset ? { name: metaAsset.name, size: metaAsset.size } : null,
+    metadata,
+    metadataError,
+    matchedBinaryAsset: fileAsset ? { name: fileAsset.name, size: fileAsset.size, downloadUrl: fileAsset.browser_download_url } : null,
+    allAssets: allAssetNames,
+    assetPattern: appRow.asset_pattern || "",
+    platform,
+    isMatchSuccess: Boolean(fileAsset && (metadata || !metaAsset)),
+  };
+}
+
+export async function rollbackToVersion(appId, targetVersionCode) {
+  const appRow = getApp(appId);
+  if (!appRow) throw new Error(`App "${appId}" 不存在`);
+  const vCode = Number(targetVersionCode);
+
+  const targetVer = rollbackVersionToLatest(appId, vCode);
+
+  // Refresh legacy file latest.{ext}
+  const ext = getFileExt(appRow.platform);
+  const releaseDir = path.join(getAppFilesDir(appId), "releases");
+  const legacyFile = path.join(releaseDir, `latest.${ext}`);
+  if (targetVer.file_url) {
+    const targetFile = path.join(releaseDir, path.basename(targetVer.file_url));
+    try {
+      await copyFile(targetFile, legacyFile);
+    } catch (err) {
+      console.warn(`[releaseService] 更新 latest.${ext} 失败:`, err.message);
+    }
+  }
+
+  // Send webhook notification
+  await sendWebhookNotification(appId, "rollback", {
+    versionName: targetVer.version_name,
+    versionCode: targetVer.version_code,
+  }).catch(console.error);
+
+  return formatVersion(targetVer);
 }

@@ -406,6 +406,7 @@ export function getAppStats(appId) {
   `).all(appId);
 
   const devStats = getAppDeviceStats(appId);
+  const versionCoverage = getVersionCoverage(appId);
 
   return {
     appId,
@@ -417,6 +418,7 @@ export function getAppStats(appId) {
     totalPatchDownloads: Number(totals?.total_patch_downloads || 0),
     totalDevices: devStats.totalDevices,
     todayDevices: devStats.todayDevices,
+    versionCoverage,
     recentDays,
   };
 }
@@ -512,6 +514,37 @@ export function getGlobalDeviceStats() {
     totalDevices: Number(row?.total_devices || 0),
     todayDevices: Number(row?.today_devices || 0),
   };
+}
+
+export function getVersionCoverage(appId) {
+  const rows = db.prepare(`
+    SELECT 
+      current_version_code,
+      COUNT(*) as device_count
+    FROM app_devices
+    WHERE app_id = ? AND current_version_code IS NOT NULL
+    GROUP BY current_version_code
+    ORDER BY current_version_code DESC
+  `).all(appId);
+
+  const total = rows.reduce((acc, r) => acc + Number(r.device_count || 0), 0);
+  const versions = db.prepare("SELECT version_code, version_name, is_latest FROM versions WHERE app_id = ?").all(appId);
+  const verMap = new Map(versions.map((v) => [Number(v.version_code), v]));
+
+  return rows.map((r) => {
+    const vCode = Number(r.current_version_code);
+    const ver = verMap.get(vCode);
+    const count = Number(r.device_count || 0);
+    const percentage = total > 0 ? Number(((count / total) * 100).toFixed(1)) : 0;
+
+    return {
+      versionCode: vCode,
+      versionName: ver ? ver.version_name : `代码: ${vCode}`,
+      isLatest: ver ? ver.is_latest === 1 : false,
+      deviceCount: count,
+      percentage,
+    };
+  });
 }
 
 // ─── Version Rollback ────────────────────────────────────────────────────────

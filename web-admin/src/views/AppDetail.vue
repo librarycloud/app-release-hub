@@ -164,6 +164,53 @@
           </div>
         </div>
       </div>
+
+      <!-- Version Coverage Distribution -->
+      <div class="stats-coverage-section" v-if="appStats.versionCoverage && appStats.versionCoverage.length > 0">
+        <div class="coverage-header">
+          <div class="coverage-title-wrap">
+            <span class="coverage-title">📱 客户端版本覆盖率分布 (活跃设备占比)</span>
+            <span class="coverage-subtitle">共统计到 {{ appStats.totalDevices || 0 }} 台活跃设备</span>
+          </div>
+        </div>
+
+        <!-- Stacked progress bar -->
+        <div class="coverage-stacked-bar">
+          <div
+            v-for="(item, idx) in appStats.versionCoverage"
+            :key="item.versionCode"
+            class="stacked-segment"
+            :style="{ width: item.percentage + '%', backgroundColor: getCoverageColor(idx) }"
+            :title="`v${item.versionName} (Build ${item.versionCode}): ${item.deviceCount} 台 (${item.percentage}%)`"
+          ></div>
+        </div>
+
+        <!-- Details Grid -->
+        <div class="coverage-grid">
+          <div
+            v-for="(item, idx) in appStats.versionCoverage"
+            :key="item.versionCode"
+            class="coverage-item"
+          >
+            <div class="coverage-item-top">
+              <div class="coverage-item-dot" :style="{ backgroundColor: getCoverageColor(idx) }"></div>
+              <span class="coverage-ver-name">v{{ item.versionName }}</span>
+              <span class="coverage-ver-code">Build {{ item.versionCode }}</span>
+              <el-tag v-if="item.isLatest" size="small" type="success" effect="dark" style="margin-left:4px">最新</el-tag>
+            </div>
+            <div class="coverage-item-bottom">
+              <span class="coverage-count">{{ item.deviceCount }} 台设备</span>
+              <span class="coverage-pct">{{ item.percentage }}%</span>
+            </div>
+            <el-progress
+              :percentage="item.percentage"
+              :show-text="false"
+              :stroke-width="6"
+              :color="getCoverageColor(idx)"
+            />
+          </div>
+        </div>
+      </div>
     </div>
 
     <div v-loading="loading">
@@ -1017,6 +1064,11 @@ const descriptionsColumn = computed(() => (isMobile.value ? 1 : 2));
 
 const appInfo = ref(null);
 const appStats = ref(null);
+
+const coverageColors = ["#6366f1", "#10b981", "#3b82f6", "#f59e0b", "#ec4899", "#8b5cf6", "#14b8a6", "#f97316"];
+function getCoverageColor(idx) {
+  return coverageColors[idx % coverageColors.length];
+}
 
 const maxTrendChecks = computed(() => {
   if (!appStats.value?.recentDays?.length) return 10;
@@ -2963,6 +3015,96 @@ onUnmounted(() => {
   flex-wrap: wrap;
   max-height: 150px;
   overflow-y: auto;
+}
+
+.stats-coverage-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.coverage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.coverage-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #f8fafc);
+}
+
+.coverage-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary, #94a3b8);
+  margin-left: 10px;
+}
+
+.coverage-stacked-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+  margin-bottom: 16px;
+}
+
+.stacked-segment {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.coverage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.coverage-item {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.coverage-item-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.coverage-item-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.coverage-ver-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #f8fafc);
+}
+
+.coverage-ver-code {
+  font-size: 12px;
+  color: var(--text-secondary, #94a3b8);
+}
+
+.coverage-item-bottom {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-secondary, #94a3b8);
+  margin-bottom: 6px;
+}
+
+.coverage-pct {
+  font-weight: 600;
+  color: var(--text-primary, #f8fafc);
 }
 </style>
 

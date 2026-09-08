@@ -85,6 +85,10 @@ describe("New Enterprise Features: Device UV, Rollback, Import/Export, Share Lan
     const data = statsRes.json().data;
     expect(data.totalDevices).toBe(2);
     expect(data.todayDevices).toBe(2);
+    expect(Array.isArray(data.versionCoverage)).toBe(true);
+    expect(data.versionCoverage.length).toBeGreaterThan(0);
+    expect(data.versionCoverage[0].versionCode).toBe(10);
+    expect(data.versionCoverage[0].percentage).toBe(100);
   });
 
   it("should return share landing info via public /api/apps/:appId/share", async () => {

@@ -457,6 +457,8 @@ onMounted(() => {
   font-size: 13px;
   line-height: 1.6;
   color: var(--text-primary, #f8fafc);
+  max-height: 250px;
+  overflow-y: auto;
 }
 
 .sha-box {

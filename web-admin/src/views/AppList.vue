@@ -120,6 +120,9 @@
                 <el-tag size="small" :type="app.autoSync ? 'success' : 'info'" effect="plain">
                   {{ app.autoSync ? `🔄 ${formatInterval(app.autoSyncIntervalMinutes)}` : '手动同步' }}
                 </el-tag>
+                <el-tag v-if="app.isPrivate" size="small" type="danger" effect="plain">
+                  🔒 私有
+                </el-tag>
               </div>
             </div>
 
@@ -259,6 +262,29 @@
           </el-select>
           <span class="hint">当发布新版本但差分包尚未生成好时，控制客户端检查更新时的表现</span>
         </el-form-item>
+
+        <el-divider content-position="left">高级控制（可选）</el-divider>
+        <el-form-item label="鉴权保护">
+          <el-switch v-model="form.isPrivate" active-text="开启 (需要 Token)" inactive-text="公开" />
+        </el-form-item>
+        <el-form-item label="Client Token" v-if="form.isPrivate">
+          <el-input v-model="form.clientToken" placeholder="客户端请求时需携带 x-client-token 头或 token 参数" />
+        </el-form-item>
+        <el-form-item label="保留版本数">
+          <el-input-number v-model="form.maxRetainedVersions" :min="0" />
+          <span class="hint" style="margin-left:8px">(0 表示不限制)</span>
+        </el-form-item>
+        <el-form-item label="Webhook URL">
+          <el-input v-model="form.webhookUrl" placeholder="如 https://open.feishu.cn/open-apis/bot/v2/hook/..." />
+        </el-form-item>
+        <el-form-item label="Webhook 类型" v-if="form.webhookUrl">
+          <el-radio-group v-model="form.webhookType">
+            <el-radio-button label="generic">通用</el-radio-button>
+            <el-radio-button label="feishu">飞书</el-radio-button>
+            <el-radio-button label="dingtalk">钉钉</el-radio-button>
+            <el-radio-button label="wecom">企微</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showCreate = false">取消</el-button>
@@ -316,6 +342,11 @@ const form = ref({
   intervalPreset: 60,
   assetPattern: "",
   patchReadinessPolicy: "hide_download_link",
+  isPrivate: false,
+  clientToken: "",
+  maxRetainedVersions: 0,
+  webhookUrl: "",
+  webhookType: "generic",
 });
 
 function onIntervalPresetChange(val) {
@@ -423,6 +454,11 @@ async function submitCreate() {
       autoSyncIntervalMinutes: Number(form.value.autoSyncIntervalMinutes) || 60,
       assetPattern: form.value.assetPattern,
       patchReadinessPolicy: form.value.patchReadinessPolicy || "hide_download_link",
+      isPrivate: form.value.isPrivate,
+      clientToken: form.value.clientToken,
+      maxRetainedVersions: form.value.maxRetainedVersions,
+      webhookUrl: form.value.webhookUrl,
+      webhookType: form.value.webhookType,
     };
     await createApp(payload);
     ElMessage.success("App 注册成功");
@@ -438,6 +474,11 @@ async function submitCreate() {
       intervalPreset: 60,
       assetPattern: "",
       patchReadinessPolicy: "hide_download_link",
+      isPrivate: false,
+      clientToken: "",
+      maxRetainedVersions: 0,
+      webhookUrl: "",
+      webhookType: "generic",
     };
     await load();
   } catch (e) {

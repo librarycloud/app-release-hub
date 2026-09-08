@@ -6,6 +6,7 @@ import "./styles/theme.css";
 import {
   Sunny,
   Moon,
+  Monitor,
   Key,
   Refresh,
   Plus,
@@ -30,6 +31,7 @@ app.use(router);
 const icons = {
   Sunny,
   Moon,
+  Monitor,
   Key,
   Refresh,
   Plus,

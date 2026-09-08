@@ -684,6 +684,8 @@
             <el-option label="macOS" value="macos" />
             <el-option label="Linux" value="linux" />
             <el-option label="iOS" value="ios" />
+            <el-option label="UniApp 热更新包 (.wgt)" value="wgt" />
+            <el-option label="React Native 离线包 (.zip)" value="rn" />
             <el-option label="其他" value="other" />
           </el-select>
         </el-form-item>

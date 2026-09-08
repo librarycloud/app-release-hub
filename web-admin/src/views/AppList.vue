@@ -235,6 +235,8 @@
                 <el-option label="🍎 macOS (.dmg/.pkg)" value="macos" />
                 <el-option label="🐧 Linux (.AppImage/.deb)" value="linux" />
                 <el-option label="📱 iOS (.ipa)" value="ios" />
+                <el-option label="📦 UniApp 热更新 (.wgt)" value="wgt" />
+                <el-option label="📦 React Native 离线包 (.zip)" value="rn" />
                 <el-option label="📦 其他通用" value="other" />
               </el-select>
             </el-form-item>
@@ -477,6 +479,9 @@ const platformFilters = computed(() => {
     { label: "macOS", value: "macos", count: counts.macos || 0 },
     { label: "Linux", value: "linux", count: counts.linux || 0 },
     { label: "iOS", value: "ios", count: counts.ios || 0 },
+    { label: "UniApp 热更新", value: "wgt", count: counts.wgt || 0 },
+    { label: "React Native", value: "rn", count: counts.rn || 0 },
+    { label: "其他", value: "other", count: counts.other || 0 },
   ];
 });
 
@@ -498,11 +503,11 @@ const filteredApps = computed(() => {
 });
 
 function platformIcon(p) {
-  return { android: "🤖", windows: "🪟", macos: "🍎", linux: "🐧", ios: "📱" }[p] || "📦";
+  return { android: "🤖", windows: "🪟", macos: "🍎", linux: "🐧", ios: "📱", wgt: "⚡", rn: "⚛️" }[p] || "📦";
 }
 
 function platformTagType(p) {
-  return { android: "success", windows: "primary", macos: "warning", linux: "danger", ios: "info" }[p] || "info";
+  return { android: "success", windows: "primary", macos: "warning", linux: "danger", ios: "info", wgt: "warning", rn: "primary" }[p] || "info";
 }
 
 function formatTime(iso) {

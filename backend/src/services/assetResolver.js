@@ -16,6 +16,8 @@ const PLATFORM_CANONICAL_EXTS = {
   macos: "dmg",
   linux: "AppImage",
   ios: "ipa",
+  wgt: "wgt",
+  rn: "zip",
 };
 
 const PLATFORM_RULES = {
@@ -42,6 +44,16 @@ const PLATFORM_RULES = {
   ios: {
     exts: [".ipa"],
     keywords: ["ios", "ipa"],
+    avoidKeywords: [],
+  },
+  wgt: {
+    exts: [".wgt", ".zip"],
+    keywords: ["wgt", "update", "patch"],
+    avoidKeywords: [],
+  },
+  rn: {
+    exts: [".zip", ".jsbundle"],
+    keywords: ["rn", "update", "bundle", "patch"],
     avoidKeywords: [],
   },
 };

@@ -151,11 +151,11 @@ const isIos = computed(() => {
 });
 
 function getPlatformIcon(p) {
-  return { android: "🤖", windows: "🪟", macos: "🍎", linux: "🐧", ios: "📱" }[p] || "📦";
+  return { android: "🤖", windows: "🪟", macos: "🍎", linux: "🐧", ios: "📱", wgt: "⚡", rn: "⚛️" }[p] || "📦";
 }
 
 function getPlatformTagType(p) {
-  return { android: "success", windows: "primary", macos: "warning", linux: "danger", ios: "info" }[p] || "info";
+  return { android: "success", windows: "primary", macos: "warning", linux: "danger", ios: "info", wgt: "warning", rn: "primary" }[p] || "info";
 }
 
 function formatSize(bytes) {

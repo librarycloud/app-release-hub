@@ -31,10 +31,18 @@ export async function computeFileSha256(filePath) {
   });
 }
 
+import os from "node:os";
+
+const MIN_FREE_MEMORY_BYTES = 128 * 1024 * 1024; // 128MB critical memory barrier
+
 async function _generatePatch(oldFilePath, newFilePath, patchOutputPath) {
   const isAvailable = await checkBsdiffAvailable();
   if (!isAvailable) {
     throw new Error("系统未安装 bsdiff，请执行 apt-get install -y bsdiff (Linux) 或 brew install bsdiff (macOS)");
+  }
+  const freeMem = os.freemem();
+  if (freeMem < MIN_FREE_MEMORY_BYTES) {
+    throw new Error(`系统当前可用内存极低 (${Math.round(freeMem / 1024 / 1024)}MB < 128MB)，暂缓执行差分以防 OOM 崩溃`);
   }
   await mkdir(path.dirname(patchOutputPath), { recursive: true });
   await execFileAsync("bsdiff", [oldFilePath, newFilePath, patchOutputPath], {

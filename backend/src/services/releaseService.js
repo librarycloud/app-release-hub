@@ -100,6 +100,12 @@ export async function generatePatchBetweenVersions(appId, fromVersionCode, targe
       size = res.size;
       sha256 = res.sha256;
 
+      // 差分体积保护：若差分补丁体积超过新版完整包的 95%，说明压缩流被打散无法获得增量效益，直接舍弃
+      if (newVer.size > 0 && size >= newVer.size * 0.95) {
+        console.warn(`[releaseService] 差分补丁体积 (${size}B) 接近或超过原包体积 (${newVer.size}B)，放弃使用增量补丁，客户端将走全量更新`);
+        return null;
+      }
+
       await saveFile(appId, "patches", patchFileName, patchTempPath);
     } finally {
       await rm(patchTempPath, { force: true }).catch(()=>{});

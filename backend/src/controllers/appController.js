@@ -67,7 +67,22 @@ export async function clientVersionController(request, reply) {
     } catch {}
   }
 
-  return ok(reply, await getVersionForClient(appId, { currentVersionCode, policy, channel, deviceId }));
+  const versionData = await getVersionForClient(appId, { currentVersionCode, policy, channel, deviceId });
+  if (versionData && app.isPrivate && app.clientToken) {
+    const tokenQuery = `token=${encodeURIComponent(app.clientToken)}`;
+    const appendToken = (url) => {
+      if (!url) return url;
+      if (url.includes("token=")) return url;
+      return url.includes("?") ? `${url}&${tokenQuery}` : `${url}?${tokenQuery}`;
+    };
+    if (versionData.downloadUrl) versionData.downloadUrl = appendToken(versionData.downloadUrl);
+    if (versionData.patchUrl) versionData.patchUrl = appendToken(versionData.patchUrl);
+    if (versionData.fallbackUrl) versionData.fallbackUrl = appendToken(versionData.fallbackUrl);
+    if (versionData.apkUrl) versionData.apkUrl = appendToken(versionData.apkUrl);
+    if (versionData.fallbackApkUrl) versionData.fallbackApkUrl = appendToken(versionData.fallbackApkUrl);
+  }
+
+  return ok(reply, versionData);
 }
 
 export async function getShareInfoController(request, reply) {

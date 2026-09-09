@@ -95,7 +95,8 @@ function parseVersion(row) {
  */
 
 function isVersionQualifying(ver, deviceId) {
-  if (ver.rolloutPercentage < 100 && deviceId) {
+  if (ver.rolloutPercentage < 100) {
+    if (!deviceId) return false;
     const hashStr = crypto.createHash('md5').update(`${deviceId}:${ver.versionCode}`).digest('hex');
     const hashNum = parseInt(hashStr.substring(0, 8), 16) % 100;
     if (hashNum >= ver.rolloutPercentage) {
@@ -160,6 +161,7 @@ export async function getVersionForClient(appId, { currentVersionCode, policy, c
     }
   }
 
+  const platform = appRow?.platform || "android";
   const base = {
     versionCode: latest.versionCode,
     versionName: latest.versionName,
@@ -171,6 +173,8 @@ export async function getVersionForClient(appId, { currentVersionCode, policy, c
     publishedAt: latest.publishedAt,
     hasUpdate,
     downloadBaseUrl: config.downloadBaseUrl || "",
+    platform,
+    isWgt: platform === "wgt",
   };
 
   if (clientCode !== null && hasUpdate) {
@@ -186,7 +190,10 @@ export async function getVersionForClient(appId, { currentVersionCode, policy, c
         patchSha256: String(patchRow.patch_sha256 || "").toLowerCase(),
         patchSize: Number(patchRow.patch_size || 0),
         fromVersionCode: Number(patchRow.from_version_code),
+        targetSha256: latest.sha256.toLowerCase(),
+        targetFileSha256: latest.sha256.toLowerCase(),
         targetApkSha256: latest.sha256.toLowerCase(),
+        sha256: latest.sha256.toLowerCase(),
         fallbackUrl: resolveUrl(latest.fileUrl),
         fallbackSize: latest.size,
         fallbackApkUrl: resolveUrl(latest.fileUrl),
@@ -215,6 +222,11 @@ export async function getVersionForClient(appId, { currentVersionCode, policy, c
         apkUrl: null,
         fallbackUrl: null,
         fallbackApkUrl: null,
+        targetSha256: latest.sha256.toLowerCase(),
+        targetFileSha256: latest.sha256.toLowerCase(),
+        targetApkSha256: latest.sha256.toLowerCase(),
+        sha256: latest.sha256.toLowerCase(),
+        size: latest.size,
       };
     }
 
@@ -230,6 +242,11 @@ export async function getVersionForClient(appId, { currentVersionCode, policy, c
         apkUrl: null,
         fallbackUrl: null,
         fallbackApkUrl: null,
+        targetSha256: latest.sha256.toLowerCase(),
+        targetFileSha256: latest.sha256.toLowerCase(),
+        targetApkSha256: latest.sha256.toLowerCase(),
+        sha256: latest.sha256.toLowerCase(),
+        size: latest.size,
       };
     }
   }
@@ -240,8 +257,13 @@ export async function getVersionForClient(appId, { currentVersionCode, policy, c
     updateType: "full",
     downloadUrl: resolveUrl(latest.fileUrl),
     apkUrl: resolveUrl(latest.fileUrl),
+    fallbackUrl: resolveUrl(latest.fileUrl),
+    fallbackSize: latest.size,
     fallbackApkUrl: resolveUrl(latest.fileUrl),
     fallbackApkSize: latest.size,
+    targetSha256: latest.sha256.toLowerCase(),
+    targetFileSha256: latest.sha256.toLowerCase(),
+    targetApkSha256: latest.sha256.toLowerCase(),
     sha256: latest.sha256.toLowerCase(),
     size: latest.size,
   };

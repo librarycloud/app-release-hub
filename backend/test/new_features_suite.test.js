@@ -183,4 +183,37 @@ describe("New Enterprise Features: Device UV, Rollback, Import/Export, Share Lan
     // Clean up imported app
     db.prepare("DELETE FROM apps WHERE app_id = ?").run("batch-imported-app");
   });
+
+  it("should return targetSha256 and platform info for hot updates and inject private token into URLs", async () => {
+    // Check version with clientToken for the now-private feature-test-app (with fallback_full policy)
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/apps/feature-test-app/version?token=token-secret-999&policy=fallback_full&versionCode=5",
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.code).toBe(0);
+    expect(body.data.hasUpdate).toBe(true);
+    expect(body.data.platform).toBe("android");
+    expect(body.data.isWgt).toBe(false);
+    expect(body.data.targetSha256).toBeDefined();
+    expect(body.data.targetFileSha256).toBeDefined();
+    // Verify token was auto-injected into download URL for private app
+    expect(body.data.downloadUrl).toContain("token=token-secret-999");
+  });
+
+  it("should not leak phased rollout version to requests without deviceId", async () => {
+    // Set v20 to 10% rollout and is_latest=1
+    db.prepare("UPDATE versions SET rollout_percentage = 10, is_latest = 1 WHERE app_id = ? AND version_code = ?").run("feature-test-app", 20);
+    // Ensure v10 has 100% rollout
+    db.prepare("UPDATE versions SET rollout_percentage = 100 WHERE app_id = ? AND version_code = ?").run("feature-test-app", 10);
+
+    // Request without deviceId should NOT receive the 10% rollout v20; it should fall back to v10
+    const resWithoutDevice = await app.inject({
+      method: "GET",
+      url: "/api/apps/feature-test-app/version?token=token-secret-999&versionCode=5",
+    });
+    expect(resWithoutDevice.statusCode).toBe(200);
+    expect(resWithoutDevice.json().data.versionCode).toBe(10);
+  });
 });

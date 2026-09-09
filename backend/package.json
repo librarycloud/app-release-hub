@@ -22,7 +22,7 @@
     "p-queue": "^9.3.3"
   },
   "devDependencies": {
-    "vitest": "^3.2.7"
+    "vitest": "^5.0.0"
   },
   "overrides": {
     "esbuild": "^0.25.0",

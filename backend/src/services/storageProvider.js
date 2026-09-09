@@ -41,11 +41,27 @@ async function ensureLocalDir(appId, subDir) {
 
 import { Upload } from "@aws-sdk/lib-storage";
 
+const MIME_TYPES = {
+  ".apk": "application/vnd.android.package-archive",
+  ".aab": "application/octet-stream",
+  ".wgt": "application/widget",
+  ".zip": "application/zip",
+  ".exe": "application/vnd.microsoft.portable-executable",
+  ".msi": "application/x-msi",
+  ".dmg": "application/x-apple-diskimage",
+  ".pkg": "application/octet-stream",
+  ".ipa": "application/octet-stream",
+  ".appimage": "application/octet-stream",
+  ".deb": "application/vnd.debian.binary-package",
+  ".patch": "application/octet-stream",
+};
+
 export async function saveFile(appId, subDir, filename, sourceFilePath) {
   if (config.storageType === "s3") {
     const key = `apps/${appId}/${subDir}/${filename}`;
     const fileStream = createReadStream(sourceFilePath);
-    const contentType = filename.endsWith(".patch") ? "application/octet-stream" : "application/vnd.android.package-archive";
+    const ext = path.extname(filename).toLowerCase();
+    const contentType = MIME_TYPES[ext] || "application/octet-stream";
     
     const upload = new Upload({
       client: s3Client,

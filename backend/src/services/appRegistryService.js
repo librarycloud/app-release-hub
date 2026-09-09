@@ -36,7 +36,7 @@ export function registerApp({
   webhookUrl = "",
   webhookType = "generic",
 }) {
-  if (!appId || !/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(appId)) {
+  if (!appId || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(appId)) {
     throw new Error("appId 只能包含小写字母、数字和连字符，且不能以连字符开头或结尾");
   }
   if (getApp(appId)) {

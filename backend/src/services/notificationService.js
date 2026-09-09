@@ -5,6 +5,7 @@ async function sendJsonPost(url, payload) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
     throw new Error(`Webhook 请求失败: HTTP ${res.status}`);

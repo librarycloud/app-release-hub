@@ -193,9 +193,8 @@ export async function electronUpdateController(request, reply) {
     return reply.code(204).send(); // 204 No Content for Electron autoUpdater when no update
   }
 
-  // Construct absolute URL
-  const baseUrl = (config.downloadBaseUrl || `${request.protocol}://${request.hostname}`).replace(/\/+$/, "");
-  const downloadUrl = `${baseUrl}${result.downloadUrl}`;
+  // Construct absolute URL safely (prevent double baseUrl if result.downloadUrl already resolved)
+  const downloadUrl = ensureAbsoluteUrl(result.downloadUrl, request);
 
   return reply.send({
     name: result.versionName || result.versionCode,
@@ -203,6 +202,23 @@ export async function electronUpdateController(request, reply) {
     pub_date: result.publishedAt ? new Date(result.publishedAt).toISOString() : new Date().toISOString(),
     url: downloadUrl
   });
+}
+
+function escapeXml(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function ensureAbsoluteUrl(url, request) {
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  const baseUrl = (config.downloadBaseUrl || `${request.protocol}://${request.hostname}`).replace(/\/+$/, "");
+  const cleanPath = url.startsWith("/") ? url : `/${url}`;
+  return `${baseUrl}${cleanPath}`;
 }
 
 export async function iosManifestController(request, reply) {
@@ -215,8 +231,10 @@ export async function iosManifestController(request, reply) {
     return reply.code(404).send("No iOS version available");
   }
 
-  const baseUrl = (config.downloadBaseUrl || `${request.protocol}://${request.hostname}`).replace(/\/+$/, "");
-  const downloadUrl = `${baseUrl}${result.downloadUrl}`;
+  const downloadUrl = ensureAbsoluteUrl(result.downloadUrl, request);
+  const bundleId = escapeXml(app.bundleId || app.bundleIdentifier || appId);
+  const bundleVersion = escapeXml(result.versionName || result.versionCode);
+  const title = escapeXml(app.name);
   
   const manifest = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -231,19 +249,19 @@ export async function iosManifestController(request, reply) {
                     <key>kind</key>
                     <string>software-package</string>
                     <key>url</key>
-                    <string>${downloadUrl}</string>
+                    <string>${escapeXml(downloadUrl)}</string>
                 </dict>
             </array>
             <key>metadata</key>
             <dict>
                 <key>bundle-identifier</key>
-                <string>${appId}</string>
+                <string>${bundleId}</string>
                 <key>bundle-version</key>
-                <string>${result.versionName || result.versionCode}</string>
+                <string>${bundleVersion}</string>
                 <key>kind</key>
                 <string>software</string>
                 <key>title</key>
-                <string>${app.name}</string>
+                <string>${title}</string>
             </dict>
         </dict>
     </array>

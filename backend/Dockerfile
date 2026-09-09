@@ -1,7 +1,7 @@
 FROM node:20-alpine
 
-# Install bsdiff for incremental patch generation
-RUN apk add --no-cache bsdiff
+# Install bsdiff for incremental patch generation and build tools for native addons (better-sqlite3)
+RUN apk add --no-cache bsdiff python3 make g++
 
 WORKDIR /app
 COPY package.json .

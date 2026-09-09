@@ -3238,12 +3238,12 @@ onUnmounted(() => {
 .coverage-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary, #f8fafc);
+  color: var(--app-text-main);
 }
 
 .coverage-subtitle {
   font-size: 12px;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--app-text-muted);
   margin-left: 10px;
 }
 
@@ -3252,7 +3252,8 @@ onUnmounted(() => {
   height: 10px;
   border-radius: 5px;
   overflow: hidden;
-  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+  background: var(--app-surface-subtle);
+  border: 1px solid var(--app-card-border);
   margin-bottom: 16px;
 }
 
@@ -3268,8 +3269,8 @@ onUnmounted(() => {
 }
 
 .coverage-item {
-  background: var(--bg-hover, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+  background: var(--app-surface-subtle);
+  border: 1px solid var(--app-card-border);
   border-radius: 10px;
   padding: 10px 12px;
 }
@@ -3291,25 +3292,25 @@ onUnmounted(() => {
 .coverage-ver-name {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-primary, #f8fafc);
+  color: var(--app-text-main);
 }
 
 .coverage-ver-code {
   font-size: 12px;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--app-text-muted);
 }
 
 .coverage-item-bottom {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--app-text-muted);
   margin-bottom: 6px;
 }
 
 .coverage-pct {
   font-weight: 600;
-  color: var(--text-primary, #f8fafc);
+  color: var(--app-text-main);
 }
 </style>
 

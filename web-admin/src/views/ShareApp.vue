@@ -6,7 +6,7 @@
 
     <div v-if="loading" class="loading-wrap">
       <el-icon class="is-loading" :size="36"><Loading /></el-icon>
-      <div style="margin-top: 12px; color: var(--text-secondary)">正在加载应用信息...</div>
+      <div style="margin-top: 12px; color: var(--app-text-muted)">正在加载应用信息...</div>
     </div>
 
     <!-- Private App Auth Dialog / Card -->
@@ -37,7 +37,7 @@
       <el-tag :type="getPlatformTagType(shareData?.platform)" style="margin-top: 6px">
         {{ (shareData?.platform || "APP").toUpperCase() }}
       </el-tag>
-      <p style="margin-top: 24px; color: var(--text-secondary)">该应用暂无可供下载的已发布版本</p>
+      <p style="margin-top: 24px; color: var(--app-text-muted)">该应用暂无可供下载的已发布版本</p>
     </div>
 
     <!-- Main Download Card -->
@@ -251,38 +251,56 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px 16px;
-  background: var(--bg-body, #0f172a);
-  background-image: radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
-                    radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.15) 0px, transparent 50%);
+  padding: 32px 16px;
+  background-color: var(--app-bg, #f8fafc);
+  background-image: radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.08) 0px, transparent 50%),
+                    radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.08) 0px, transparent 50%);
+  color: var(--app-text-main, #0f172a);
   position: relative;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+[data-theme="dark"] .share-container,
+html.dark .share-container {
+  background-color: var(--app-bg, #090d16);
+  background-image: radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.18) 0px, transparent 50%),
+                    radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.15) 0px, transparent 50%);
 }
 
 .theme-bar {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 20px;
+  right: 20px;
+  z-index: 10;
 }
 
 .loading-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: var(--primary, #6366f1);
+  color: var(--app-accent, #6366f1);
 }
 
 .download-card, .auth-card, .empty-card {
   width: 100%;
   max-width: 480px;
-  border-radius: 20px;
+  border-radius: 20px !important;
   padding: 32px 24px;
-  background: var(--bg-card, rgba(30, 41, 59, 0.75));
+  background: var(--app-card-bg, rgba(255, 255, 255, 0.95)) !important;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--app-card-border, #e2e8f0) !important;
+  box-shadow: var(--app-card-shadow, 0 10px 30px rgba(0, 0, 0, 0.05)) !important;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
+  transition: all 0.3s ease;
+}
+
+html.dark .download-card,
+html.dark .auth-card,
+html.dark .empty-card {
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06) !important;
 }
 
 .app-header {
@@ -296,13 +314,20 @@ onMounted(() => {
   width: 64px;
   height: 64px;
   border-radius: 16px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.2));
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(168, 85, 247, 0.12));
+  border: 1px solid rgba(99, 102, 241, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 32px;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08);
+}
+
+html.dark .platform-avatar {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(168, 85, 247, 0.22));
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .app-info {
@@ -318,13 +343,14 @@ onMounted(() => {
 }
 
 .app-name {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
-  color: var(--text-primary, #f8fafc);
+  color: var(--app-text-main, #0f172a);
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  letter-spacing: -0.01em;
 }
 
 .app-sub-row {
@@ -337,19 +363,20 @@ onMounted(() => {
 .version-name {
   font-weight: 600;
   font-size: 14px;
-  color: var(--text-primary, #f8fafc);
+  color: var(--app-text-main, #0f172a);
 }
 
 .version-code {
   font-size: 13px;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--app-text-muted, #94a3b8);
 }
 
 .meta-strip {
   display: flex;
   justify-content: space-around;
-  padding: 12px 0;
-  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+  padding: 14px 0;
+  background: var(--app-surface-subtle, #f1f5f9);
+  border: 1px solid var(--app-card-border, #e2e8f0);
   border-radius: 12px;
   margin-bottom: 24px;
 }
@@ -363,13 +390,14 @@ onMounted(() => {
 
 .meta-label {
   font-size: 12px;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--app-text-muted, #94a3b8);
+  font-weight: 500;
 }
 
 .meta-val {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary, #f8fafc);
+  color: var(--app-text-main, #0f172a);
 }
 
 .action-wrap {
@@ -384,30 +412,44 @@ onMounted(() => {
   font-size: 16px;
   font-weight: 600;
   border-radius: 12px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
   border: none;
-  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35);
+  color: #ffffff;
+  transition: all 0.2s ease;
 }
 
 .download-btn:hover {
-  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  background: linear-gradient(135deg, #4338ca, #6d28d9);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+  transform: translateY(-1px);
 }
 
 .copy-btn {
-  height: 40px;
+  height: 42px;
   border-radius: 12px;
   font-size: 14px;
+  background: var(--app-card-bg, #ffffff);
+  border: 1px solid var(--app-card-border, #e2e8f0);
+  color: var(--app-text-main, #0f172a);
+  transition: all 0.2s ease;
+}
+
+.copy-btn:hover {
+  border-color: var(--app-accent, #3b82f6);
+  color: var(--app-accent, #3b82f6);
+  background: var(--app-surface-subtle, #f8fafc);
 }
 
 .qr-section {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 18px;
   padding: 16px;
-  background: var(--bg-hover, rgba(255, 255, 255, 0.03));
+  background: var(--app-surface-subtle, #f1f5f9);
   border-radius: 14px;
   margin-bottom: 24px;
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--app-card-border, #e2e8f0);
 }
 
 .qr-box {
@@ -418,6 +460,8 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  border: 1px solid var(--app-card-border, #e2e8f0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .qr-tip {
@@ -427,18 +471,19 @@ onMounted(() => {
 .qr-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary, #f8fafc);
+  color: var(--app-text-main, #0f172a);
   margin-bottom: 4px;
 }
 
 .qr-sub {
   font-size: 12px;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--app-text-muted, #94a3b8);
   line-height: 1.5;
 }
 
 .notes-card {
-  background: var(--bg-hover, rgba(255, 255, 255, 0.03));
+  background: var(--app-surface-subtle, #f1f5f9);
+  border: 1px solid var(--app-card-border, #e2e8f0);
   border-radius: 12px;
   padding: 16px;
   margin-bottom: 16px;
@@ -447,7 +492,7 @@ onMounted(() => {
 .notes-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--app-text-sub, #475569);
   margin-bottom: 8px;
 }
 
@@ -456,7 +501,7 @@ onMounted(() => {
   padding-left: 18px;
   font-size: 13px;
   line-height: 1.6;
-  color: var(--text-primary, #f8fafc);
+  color: var(--app-text-main, #0f172a);
   max-height: 250px;
   overflow-y: auto;
 }
@@ -466,20 +511,29 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--app-text-muted, #94a3b8);
   word-break: break-all;
 }
 
 .sha-text {
   font-family: monospace;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 2px 4px;
+  background: var(--app-code-bg, #f1f5f9);
+  border: 1px solid var(--app-card-border, #e2e8f0);
+  color: var(--app-text-sub, #475569);
+  padding: 2px 6px;
   border-radius: 4px;
 }
 
 .auth-card, .empty-card {
   text-align: center;
   align-items: center;
+}
+
+.auth-card h2, .empty-card h2 {
+  color: var(--app-text-main, #0f172a);
+  margin: 0 0 12px 0;
+  font-size: 20px;
+  font-weight: 700;
 }
 
 .auth-icon {
@@ -489,9 +543,13 @@ onMounted(() => {
 
 .auth-desc {
   font-size: 14px;
-  color: var(--text-secondary, #94a3b8);
+  color: var(--app-text-sub, #475569);
   margin-bottom: 24px;
   line-height: 1.5;
+}
+
+.auth-desc strong {
+  color: var(--app-text-main, #0f172a);
 }
 
 .auth-form {

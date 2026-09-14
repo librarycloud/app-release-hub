@@ -1071,6 +1071,7 @@ import {
   formatDateTime,
   formatShortTime,
 } from "../utils/time.js";
+import { getPlatformIcon as platformIcon, getPlatformTagType as platformTagType, formatSize } from "../utils/platform.js";
 import {
   listApps,
   updateApp,
@@ -1374,12 +1375,7 @@ async function submitEditApp() {
   }
 }
 
-function formatSize(bytes) {
-  if (!bytes) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-}
+
 
 function formatTime(iso) {
   return formatShortTime(iso);
@@ -1741,13 +1737,7 @@ function copyLink(url) {
   ElMessage.success("已复制到剪贴板");
 }
 
-function platformIcon(p) {
-  return { android: "🤖", windows: "🪟", macos: "🍎", linux: "🐧", ios: "📱", wgt: "⚡", rn: "⚛️" }[p] || "📦";
-}
 
-function platformTagType(p) {
-  return { android: "success", windows: "primary", macos: "warning", linux: "danger", ios: "info", wgt: "warning", rn: "primary" }[p] || "info";
-}
 
 onMounted(() => {
   handleResize();

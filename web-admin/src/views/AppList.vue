@@ -355,6 +355,7 @@ import {
   getTimeZoneOffsetString,
   formatChineseTime,
 } from "../utils/time.js";
+import { getPlatformIcon as platformIcon, getPlatformTagType as platformTagType } from "../utils/platform";
 
 const router = useRouter();
 const timeZoneOffset = getTimeZoneOffsetString();
@@ -502,13 +503,7 @@ const filteredApps = computed(() => {
   return list;
 });
 
-function platformIcon(p) {
-  return { android: "🤖", windows: "🪟", macos: "🍎", linux: "🐧", ios: "📱", wgt: "⚡", rn: "⚛️" }[p] || "📦";
-}
 
-function platformTagType(p) {
-  return { android: "success", windows: "primary", macos: "warning", linux: "danger", ios: "info", wgt: "warning", rn: "primary" }[p] || "info";
-}
 
 function formatTime(iso) {
   return formatChineseTime(iso);

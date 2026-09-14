@@ -156,6 +156,14 @@ async function serveFileWithRange(request, reply, appId, subDir, filename, recor
 
   reply.header("Accept-Ranges", "bytes");
   reply.header("Content-Disposition", `attachment; filename="${filename}"`);
+  reply.header("X-Content-Type-Options", "nosniff");
+  reply.header("Cache-Control", "public, max-age=2592000, immutable");
+  
+  if (filename.toLowerCase().endsWith(".apk")) {
+    reply.header("Content-Type", "application/vnd.android.package-archive");
+  } else {
+    reply.header("Content-Type", "application/octet-stream");
+  }
 
   const range = request.headers.range;
   if (range) {

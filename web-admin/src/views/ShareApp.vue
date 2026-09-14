@@ -131,6 +131,7 @@ import { ElMessage } from "element-plus";
 import { Download, Loading } from "@element-plus/icons-vue";
 import QrcodeVue from "qrcode.vue";
 import ThemeToggle from "../components/ThemeToggle.vue";
+import { getPlatformIcon, getPlatformTagType, formatSize } from "../utils/platform";
 
 const route = useRoute();
 const appId = computed(() => route.params.appId);
@@ -148,24 +149,8 @@ const currentShareUrl = computed(() => {
 
 const isIos = computed(() => {
   return shareData.value?.platform === "ios";
+
 });
-
-function getPlatformIcon(p) {
-  return { android: "🤖", windows: "🪟", macos: "🍎", linux: "🐧", ios: "📱", wgt: "⚡", rn: "⚛️" }[p] || "📦";
-}
-
-function getPlatformTagType(p) {
-  return { android: "success", windows: "primary", macos: "warning", linux: "danger", ios: "info", wgt: "warning", rn: "primary" }[p] || "info";
-}
-
-function formatSize(bytes) {
-  if (!bytes || bytes <= 0) return "未知大小";
-  const mb = bytes / (1024 * 1024);
-  if (mb >= 1024) {
-    return `${(mb / 1024).toFixed(2)} GB`;
-  }
-  return `${mb.toFixed(1)} MB`;
-}
 
 async function loadShareInfo(token = "") {
   loading.value = true;

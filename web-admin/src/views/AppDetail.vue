@@ -76,15 +76,16 @@
             target="_blank"
             rel="noopener noreferrer"
             class="meta-chip-link"
-            title="前往 GitHub 仓库"
+            :title="`前往 GitHub 仓库: ${appInfo.githubRepo}`"
           >
-            {{ appInfo.githubRepo }} ↗
+            <span class="repo-name-text">{{ appInfo.githubRepo }}</span>
+            <span class="repo-arrow">↗</span>
           </a>
         </div>
 
         <div class="meta-chip" v-if="appInfo?.assetPattern">
           <span class="meta-chip-label">🎯 匹配正则:</span>
-          <code class="meta-chip-code">{{ appInfo.assetPattern }}</code>
+          <code class="meta-chip-code" :title="`正则匹配: ${appInfo.assetPattern}`">{{ appInfo.assetPattern }}</code>
         </div>
 
         <div class="meta-chip" v-if="appInfo">
@@ -1901,11 +1902,14 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .meta-chip-label {
   color: var(--app-text-muted);
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .meta-chip-link {
@@ -1914,11 +1918,28 @@ onUnmounted(() => {
   font-family: monospace;
   font-weight: 500;
   transition: color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 480px;
 }
 
 .meta-chip-link:hover {
   text-decoration: underline;
   color: #2563eb;
+}
+
+.repo-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.repo-arrow {
+  flex-shrink: 0;
+  font-size: 12px;
 }
 
 .meta-chip-code {
@@ -1929,6 +1950,11 @@ onUnmounted(() => {
   font-size: 12px;
   color: var(--app-accent, #3b82f6);
   font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+  min-width: 0;
 }
 
 .meta-sync-ctrl {
@@ -1983,12 +2009,19 @@ onUnmounted(() => {
   border: 1px solid rgba(239, 68, 68, 0.2);
   padding: 2px 10px;
   border-radius: 6px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .meta-error-text {
   color: #ef4444;
   font-size: 12px;
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  display: block;
 }
 
 /* App Stats Overview Banner */
@@ -2943,10 +2976,48 @@ onUnmounted(() => {
 
   .toolbar-meta-ribbon {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 8px;
     margin-top: 12px;
     padding-top: 12px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .meta-chip {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .meta-chip-link {
+    flex: 1;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .repo-name-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .meta-chip-code {
+    flex: 1;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .meta-chip-error {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .meta-error-text {
+    flex: 1;
+    min-width: 0;
+    max-width: 100%;
   }
 
   /* Stats overview & trend */

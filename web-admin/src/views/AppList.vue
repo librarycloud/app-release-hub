@@ -152,7 +152,7 @@
             <div class="app-details">
               <div v-if="app.githubRepo" class="detail-row">
                 <span class="detail-label">仓库:</span>
-                <span class="repo-text" :title="app.githubRepo">
+                <span class="repo-text" :title="`GitHub 仓库: ${app.githubRepo}`">
                   {{ app.githubRepo }}
                 </span>
               </div>
@@ -879,12 +879,16 @@ html.dark .pill-count {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
+  width: 100%;
 }
 
 .detail-row {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .detail-label {
@@ -895,6 +899,10 @@ html.dark .pill-count {
 
 .detail-val {
   color: var(--app-text-sub);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .repo-text {
@@ -903,6 +911,8 @@ html.dark .pill-count {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .pattern-badge {
@@ -914,6 +924,8 @@ html.dark .pill-count {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .sync-error-banner {
@@ -926,6 +938,9 @@ html.dark .pill-count {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .app-card-stats {

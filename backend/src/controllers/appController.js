@@ -18,17 +18,32 @@ import {
 import { getVersionForClient, getPatchMatrix, updateVersionConfig } from "../services/versionService.js";
 import { getDownloadUrl, getFileMeta, saveFile } from "../services/storageProvider.js";
 import { sendWebhookNotification } from "../services/notificationService.js";
+import {
+  getSafeAppDir,
+  getSafeFilePath,
+  assertSafeLocalPath,
+  sanitizeAppId,
+  sanitizeFilename,
+  sanitizeSubDir,
+} from "../utils/pathSecurity.js";
 
 function ok(reply, data, message = "ok") {
   return reply.send({ code: 0, message, data });
 }
 
-function appFilesDir(appId) { return path.resolve(config.filesDir, appId); }
+function appFilesDir(appId) { return getSafeAppDir(appId); }
 
 async function requireApp(appId, reply) {
-  const app = getAppById(appId);
+  let safeId;
+  try {
+    safeId = sanitizeAppId(appId);
+  } catch (err) {
+    reply.code(400).send({ code: 400, message: err.message });
+    return null;
+  }
+  const app = getAppById(safeId);
   if (!app) {
-    reply.code(404).send({ code: 404, message: `App "${appId}" 不存在` });
+    reply.code(404).send({ code: 404, message: `App "${safeId}" 不存在` });
     return null;
   }
   return app;
@@ -138,28 +153,38 @@ async function serveFileWithRange(request, reply, appId, subDir, filename, recor
     return reply.code(403).send({ code: 403, message: "无权下载此私有 App" });
   }
 
-  try { recordStatFn(appId, filename); } catch {}
+  let safeSubDir, safeFilename;
+  try {
+    safeSubDir = sanitizeSubDir(subDir);
+    safeFilename = sanitizeFilename(filename);
+  } catch (err) {
+    return reply.code(400).send({ code: 400, message: err.message });
+  }
+
+  try { recordStatFn(app.appId, safeFilename); } catch {}
 
   if (config.storageType === "s3") {
-    const url = await getDownloadUrl(appId, subDir, filename, app.isPrivate);
+    const url = await getDownloadUrl(app.appId, safeSubDir, safeFilename, app.isPrivate);
     return reply.redirect(302, url);
   }
 
   if (config.enableNginxAccel) {
     return reply
-      .header("X-Accel-Redirect", `${config.nginxInternalPathPrefix}/${appId}/${subDir}/${filename}`)
+      .header("X-Accel-Redirect", `${config.nginxInternalPathPrefix}/${app.appId}/${safeSubDir}/${safeFilename}`)
       .send();
   }
 
-  const { exists, size, path: filePath } = await getFileMeta(appId, subDir, filename);
+  const { exists, size, path: filePath } = await getFileMeta(app.appId, safeSubDir, safeFilename);
   if (!exists) return reply.code(404).send({ code: 404, message: "文件不存在" });
 
+  const safeFilePath = assertSafeLocalPath(filePath);
+
   reply.header("Accept-Ranges", "bytes");
-  reply.header("Content-Disposition", `attachment; filename="${filename}"`);
+  reply.header("Content-Disposition", `attachment; filename="${safeFilename}"`);
   reply.header("X-Content-Type-Options", "nosniff");
   reply.header("Cache-Control", "public, max-age=2592000, immutable");
   
-  if (filename.toLowerCase().endsWith(".apk")) {
+  if (safeFilename.toLowerCase().endsWith(".apk")) {
     reply.header("Content-Type", "application/vnd.android.package-archive");
   } else {
     reply.header("Content-Type", "application/octet-stream");
@@ -177,11 +202,11 @@ async function serveFileWithRange(request, reply, appId, subDir, filename, recor
       .code(206)
       .header("Content-Range", `bytes ${start}-${end}/${size}`)
       .header("Content-Length", end - start + 1);
-    return reply.send(createReadStream(filePath, { start, end }));
+    return reply.send(createReadStream(safeFilePath, { start, end }));
   }
 
   reply.header("Content-Length", size);
-  return reply.send(createReadStream(filePath));
+  return reply.send(createReadStream(safeFilePath));
 }
 
 export async function serveReleaseController(request, reply) {
@@ -397,11 +422,13 @@ export async function createVersionController(request, reply) {
     try {
       for await (const part of parts) {
         if (part.type === "file") {
-          originalFilename = part.filename;
-          const uploadDir = path.join(appFilesDir(appId), "uploads");
+          originalFilename = sanitizeFilename(part.filename);
+          const uploadDir = getSafeFilePath(app.appId, "uploads");
           await mkdir(uploadDir, { recursive: true });
-          const tmpName = `.upload-${Date.now()}-${Math.random().toString(36).slice(2)}${path.extname(part.filename || "")}`;
-          tempFilePath = path.join(uploadDir, tmpName);
+          const ext = path.extname(originalFilename || "");
+          const cleanExt = /^[a-zA-Z0-9.]+$/.test(ext) ? ext : "";
+          const tmpName = sanitizeFilename(`.upload-${Date.now()}-${Math.random().toString(36).slice(2)}${cleanExt}`);
+          tempFilePath = getSafeFilePath(app.appId, "uploads", tmpName);
           await pipeline(part.file, createWriteStream(tempFilePath));
         } else {
           fields[part.fieldname] = part.value;
@@ -409,14 +436,14 @@ export async function createVersionController(request, reply) {
       }
 
       const fileInfo = tempFilePath ? { filePath: tempFilePath, originalFilename } : null;
-      const result = await createManualVersion(appId, fields, fileInfo);
+      const result = await createManualVersion(app.appId, fields, fileInfo);
       return reply.code(201).send({ code: 0, message: "版本创建成功", data: result });
     } catch (err) {
       if (tempFilePath) await rm(tempFilePath, { force: true }).catch(() => {});
       throw err;
     }
   } else {
-    const result = await createManualVersion(appId, request.body || {}, null);
+    const result = await createManualVersion(app.appId, request.body || {}, null);
     return reply.code(201).send({ code: 0, message: "版本创建成功", data: result });
   }
 }
@@ -435,9 +462,10 @@ export async function uploadPatchController(request, reply) {
   try {
     for await (const part of parts) {
       if (part.type === "file") {
-        const uploadDir = path.join(appFilesDir(appId), "uploads");
+        const uploadDir = getSafeFilePath(app.appId, "uploads");
         await mkdir(uploadDir, { recursive: true });
-        tempFilePath = path.join(uploadDir, `patch-${Date.now()}.tmp`);
+        const tmpName = sanitizeFilename(`patch-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`);
+        tempFilePath = getSafeFilePath(app.appId, "uploads", tmpName);
         await pipeline(part.file, createWriteStream(tempFilePath));
       } else {
         fields[part.fieldname] = part.value;
@@ -448,8 +476,8 @@ export async function uploadPatchController(request, reply) {
       throw new Error("参数不完整 (fromVersionCode, targetVersionCode, file)");
     }
     
-    const patchFileName = `patch-v${fields.fromVersionCode}-to-v${fields.targetVersionCode}.patch`;
-    await saveFile(appId, "patches", patchFileName, tempFilePath);
+    const patchFileName = sanitizeFilename(`patch-v${fields.fromVersionCode}-to-v${fields.targetVersionCode}.patch`);
+    await saveFile(app.appId, "patches", patchFileName, tempFilePath);
     
     // We can also trigger a manual upsertPatch here, but releaseService generates the DB record.
     // For manual patch upload, we'd need to insert it manually.
@@ -459,11 +487,11 @@ export async function uploadPatchController(request, reply) {
     const sha256 = await computeFileSha256(tempFilePath);
     const size = (await stat(tempFilePath)).size;
     
-    upsertPatch(appId, {
+    upsertPatch(app.appId, {
       fromVersionCode: Number(fields.fromVersionCode),
       targetVersionCode: Number(fields.targetVersionCode),
       patchFile: patchFileName,
-      patchUrl: `/api/apps/${appId}/patches/${patchFileName}`,
+      patchUrl: `/api/apps/${app.appId}/patches/${patchFileName}`,
       patchSha256: sha256,
       patchSize: size
     });

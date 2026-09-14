@@ -42,7 +42,7 @@ export async function sendWebhookNotification(appId, eventType, data) {
       await pushMessage(url, type, `✅ ${appName} Webhook 测试`, "这是一条测试消息，您的 Webhook 配置正常。");
     }
   } catch (err) {
-    console.warn(`[notificationService] Webhook 通知发送失败 (${appId}):`, err.message);
+    console.warn("[notificationService] Webhook 通知发送失败 (%s): %s", appId, err.message);
   }
 }
 

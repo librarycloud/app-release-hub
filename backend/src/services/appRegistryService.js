@@ -16,7 +16,9 @@ export function cleanGithubRepo(input) {
   repo = repo.replace(/^https?:\/\/github\.com\//i, "");
   repo = repo.replace(/^github\.com\//i, "");
   repo = repo.replace(/\.git$/i, "");
-  repo = repo.replace(/\/+$/, "");
+  while (repo.endsWith("/")) {
+    repo = repo.slice(0, -1);
+  }
   return repo;
 }
 

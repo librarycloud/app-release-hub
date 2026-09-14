@@ -22,6 +22,13 @@ import { getFileExt, findMetadataAsset, findBinaryAsset } from "./assetResolver.
 import { cleanGithubRepo } from "./appRegistryService.js";
 import { saveFile, deleteFile, ensureLocalFilePath, getFileMeta } from "./storageProvider.js";
 import { sendWebhookNotification } from "./notificationService.js";
+import {
+  getSafeAppDir,
+  getSafeFilePath,
+  assertSafeLocalPath,
+  sanitizeAppId,
+  sanitizeFilename,
+} from "../utils/pathSecurity.js";
 
 const metadataTimeoutMs = 30_000;
 const fileTimeoutMs = 180_000;
@@ -34,7 +41,7 @@ export function isPatchInFlight(appId, fromCode, targetCode) {
 const inFlightSyncs = new Map();
 
 function getAppFilesDir(appId) {
-  return path.resolve(config.filesDir, appId);
+  return getSafeAppDir(appId);
 }
 
 async function fetchWithTimeout(url, options, timeoutMs) {
@@ -51,12 +58,13 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 }
 
 async function downloadWithTimeout(url, options, dest, timeoutMs) {
+  const safeDest = assertSafeLocalPath(dest);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { ...options, signal: controller.signal });
     if (!res.ok || !res.body) throw new Error(`下载失败: HTTP ${res.status}`);
-    await pipeline(res.body, createWriteStream(dest));
+    await pipeline(res.body, createWriteStream(safeDest));
   } catch (err) {
     if (err?.name === "AbortError") throw new Error(`下载超时 (${Math.ceil(timeoutMs / 1000)}s)`);
     throw err;
@@ -72,27 +80,28 @@ function buildHeaders(token) {
 }
 
 export async function generatePatchBetweenVersions(appId, fromVersionCode, targetVersionCode) {
+  const safeAppId = sanitizeAppId(appId);
   const fromCode = Number(fromVersionCode);
   const targetCode = Number(targetVersionCode);
-  const taskKey = `${appId}:${fromCode}->${targetCode}`;
+  const taskKey = `${safeAppId}:${fromCode}->${targetCode}`;
 
   if (inFlightPatches.has(taskKey)) return await inFlightPatches.get(taskKey);
 
   const taskPromise = (async () => {
-    const oldVer = getVersion(appId, fromCode);
-    const newVer = getVersion(appId, targetCode);
+    const oldVer = getVersion(safeAppId, fromCode);
+    const newVer = getVersion(safeAppId, targetCode);
     if (!oldVer || !newVer) throw new Error("版本不存在");
 
-    const oldFn = path.basename(oldVer.file_url);
-    const newFn = path.basename(newVer.file_url);
+    const oldFn = sanitizeFilename(path.basename(oldVer.file_url));
+    const newFn = sanitizeFilename(path.basename(newVer.file_url));
 
-    const oldLocal = await ensureLocalFilePath(appId, "releases", oldFn);
-    const newLocal = await ensureLocalFilePath(appId, "releases", newFn);
+    const oldLocal = await ensureLocalFilePath(safeAppId, "releases", oldFn);
+    const newLocal = await ensureLocalFilePath(safeAppId, "releases", newFn);
 
-    const patchFileName = `patch-v${fromCode}-to-v${targetCode}.patch`;
-    const tmpDir = path.join(getAppFilesDir(appId), "tmp");
+    const patchFileName = sanitizeFilename(`patch-v${fromCode}-to-v${targetCode}.patch`);
+    const tmpDir = getSafeFilePath(safeAppId, "tmp");
     await mkdir(tmpDir, { recursive: true });
-    const patchTempPath = path.join(tmpDir, patchFileName);
+    const patchTempPath = getSafeFilePath(safeAppId, "tmp", patchFileName);
 
     let size, sha256;
     try {
@@ -106,7 +115,7 @@ export async function generatePatchBetweenVersions(appId, fromVersionCode, targe
         return null;
       }
 
-      await saveFile(appId, "patches", patchFileName, patchTempPath);
+      await saveFile(safeAppId, "patches", patchFileName, patchTempPath);
     } finally {
       await rm(patchTempPath, { force: true }).catch(()=>{});
       if (oldLocal.isTemp) await rm(oldLocal.path, { force: true }).catch(()=>{});
@@ -117,11 +126,11 @@ export async function generatePatchBetweenVersions(appId, fromVersionCode, targe
       fromVersionCode: fromCode,
       targetVersionCode: targetCode,
       patchFile: patchFileName,
-      patchUrl: `/api/apps/${appId}/patches/${patchFileName}`,
+      patchUrl: `/api/apps/${safeAppId}/patches/${patchFileName}`,
       patchSha256: sha256,
       patchSize: size,
     };
-    upsertPatch(appId, patchRecord);
+    upsertPatch(safeAppId, patchRecord);
     return patchRecord;
   })();
 
@@ -204,6 +213,7 @@ async function pruneOldVersions(appId) {
 }
 
 async function _doSyncLatestRelease(appId, { githubRepo, githubApiUrl = "https://api.github.com", token = "", platform = "android", assetPattern = "" }) {
+  const safeAppId = sanitizeAppId(appId);
   if (!githubRepo) throw new Error("githubRepo 未配置");
   const cleanRepo = cleanGithubRepo(githubRepo);
   const defaultExt = getFileExt(platform);
@@ -241,11 +251,11 @@ async function _doSyncLatestRelease(appId, { githubRepo, githubApiUrl = "https:/
   const versionName = String(metadata.versionName || "").trim();
   if (!Number.isInteger(versionCode) || versionCode < 1 || !versionName) throw new Error("Release 元数据无效 (versionCode / versionName)");
 
-  const existingLatest = getLatestVersion(appId);
+  const existingLatest = getLatestVersion(safeAppId);
   if (existingLatest && Number(existingLatest.version_code) === versionCode) {
-    const fn = path.basename(existingLatest.file_url || "");
+    const fn = sanitizeFilename(path.basename(existingLatest.file_url || ""));
     if (fn) {
-      const m = await getFileMeta(appId, "releases", fn);
+      const m = await getFileMeta(safeAppId, "releases", fn);
       if (m.exists && m.size > 0) {
         return { versionCode, versionName, releaseUrl: release.html_url, patchesGenerated: [], alreadyLatest: true, size: m.size, releaseNotes: metadata.releaseNotes };
       }
@@ -253,17 +263,18 @@ async function _doSyncLatestRelease(appId, { githubRepo, githubApiUrl = "https:/
   }
 
   const randSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const tmpDir = path.join(getAppFilesDir(appId), "tmp");
+  const tmpDir = getSafeFilePath(safeAppId, "tmp");
   await mkdir(tmpDir, { recursive: true });
-  const tempFile = path.join(tmpDir, `.release-${versionCode}-${randSuffix}.tmp`);
+  const tempFileName = sanitizeFilename(`.release-${versionCode}-${randSuffix}.tmp`);
+  const tempFile = getSafeFilePath(safeAppId, "tmp", tempFileName);
 
   try {
     await downloadWithTimeout(fileAsset.browser_download_url, { headers }, tempFile, fileTimeoutMs);
     const tempStat = await stat(tempFile);
     if (!tempStat.isFile() || tempStat.size === 0) throw new Error("下载安装包失败: 临时文件为空或未完整写入");
     
-    const releaseFileName = `release-v${versionCode}.${ext}`;
-    await saveFile(appId, "releases", releaseFileName, tempFile);
+    const releaseFileName = sanitizeFilename(`release-v${versionCode}.${ext}`);
+    await saveFile(safeAppId, "releases", releaseFileName, tempFile);
 
     const sha256 = await computeFileSha256(tempFile);
     const fileStat = await stat(tempFile);
@@ -283,21 +294,21 @@ async function _doSyncLatestRelease(appId, { githubRepo, githubApiUrl = "https:/
     const channel = metadata.channel || "stable";
     const rolloutPercentage = metadata.rolloutPercentage !== undefined ? Number(metadata.rolloutPercentage) : 100;
 
-    upsertVersion(appId, {
+    upsertVersion(safeAppId, {
       versionCode, versionName, minVersionCode: Number.isInteger(Number(metadata.minVersionCode)) ? Number(metadata.minVersionCode) : 1,
       forceUpdate: Boolean(metadata.forceUpdate), releaseNotes, changelogUrl,
       publishedAt: String(metadata.publishedAt || release.published_at || "").slice(0, 10),
-      fileUrl: `/api/apps/${appId}/releases/${releaseFileName}`,
+      fileUrl: `/api/apps/${safeAppId}/releases/${releaseFileName}`,
       sha256, size: fileStat.size, isLatest: true, channel, rolloutPercentage
     });
 
     const patchesGenerated = [];
     const bsdiffOk = await checkBsdiffAvailable();
     if (bsdiffOk) {
-      const history = getVersionHistory(appId).filter((h) => Number(h.version_code) < versionCode).slice(0, 3);
+      const history = getVersionHistory(safeAppId).filter((h) => Number(h.version_code) < versionCode).slice(0, 3);
       for (const prev of history) {
         try {
-          const res = await generatePatchBetweenVersions(appId, prev.version_code, versionCode);
+          const res = await generatePatchBetweenVersions(safeAppId, prev.version_code, versionCode);
           patchesGenerated.push(res);
         } catch (err) {
           console.warn(`[releaseService] 差分生成失败:`, err.message);
@@ -312,37 +323,37 @@ async function _doSyncLatestRelease(appId, { githubRepo, githubApiUrl = "https:/
 }
 
 export async function deleteReleaseVersion(appId, versionCode) {
+  const safeAppId = sanitizeAppId(appId);
   const vCode = Number(versionCode);
-  const appRow = getApp(appId);
-  if (!appRow) throw new Error(`App "${appId}" 不存在`);
+  const appRow = getApp(safeAppId);
+  if (!appRow) throw new Error(`App "${safeAppId}" 不存在`);
 
-  const ver = getVersion(appId, vCode);
+  const ver = getVersion(safeAppId, vCode);
   if (!ver) return;
 
-  const allPatches = getAllPatches(appId);
+  const allPatches = getAllPatches(safeAppId);
   const relatedPatches = allPatches.filter((p) => Number(p.from_version_code) === vCode || Number(p.target_version_code) === vCode);
 
-  const result = deleteVersionRecord(appId, vCode);
+  const result = deleteVersionRecord(safeAppId, vCode);
 
   for (const p of relatedPatches) {
-    if (p.patch_file) await deleteFile(appId, "patches", p.patch_file);
+    if (p.patch_file) await deleteFile(safeAppId, "patches", sanitizeFilename(p.patch_file));
   }
   
   if (ver.file_url) {
-    await deleteFile(appId, "releases", path.basename(ver.file_url));
+    await deleteFile(safeAppId, "releases", sanitizeFilename(path.basename(ver.file_url)));
   }
 
-  const remainingCount = db.prepare("SELECT COUNT(*) as cnt FROM versions WHERE app_id = ?").get(appId)?.cnt || 0;
+  const remainingCount = db.prepare("SELECT COUNT(*) as cnt FROM versions WHERE app_id = ?").get(safeAppId)?.cnt || 0;
   const ext = getFileExt(appRow.platform);
-  const releaseDir = path.join(getAppFilesDir(appId), "releases");
-  const legacyFile = path.join(releaseDir, `latest.${ext}`);
+  const legacyFile = getSafeFilePath(safeAppId, "releases", sanitizeFilename(`latest.${ext}`));
   if (remainingCount === 0) {
     await rm(legacyFile, { force: true }).catch(() => {});
   } else if (result?.newLatest) {
     const newLatestCode = Number(result.newLatest.version_code);
-    const newVer = getVersion(appId, newLatestCode);
+    const newVer = getVersion(safeAppId, newLatestCode);
     if (newVer?.file_url) {
-      const newLatestFile = path.join(releaseDir, path.basename(newVer.file_url));
+      const newLatestFile = getSafeFilePath(safeAppId, "releases", sanitizeFilename(path.basename(newVer.file_url)));
       try {
         await copyFile(newLatestFile, legacyFile);
       } catch (err) {
@@ -355,26 +366,26 @@ export async function deleteReleaseVersion(appId, versionCode) {
 }
 
 export async function refreshAppLatestVersion(appId) {
-  const appRow = getApp(appId);
+  const safeAppId = sanitizeAppId(appId);
+  const appRow = getApp(safeAppId);
   const ext = getFileExt(appRow?.platform);
-  const releaseDir = path.join(getAppFilesDir(appId), "releases");
-  const legacyFile = path.join(releaseDir, `latest.${ext}`);
-  const history = getVersionHistory(appId);
+  const legacyFile = getSafeFilePath(safeAppId, "releases", sanitizeFilename(`latest.${ext}`));
+  const history = getVersionHistory(safeAppId);
 
   if (history.length === 0) {
-    db.prepare("UPDATE versions SET is_latest = 0 WHERE app_id = ?").run(appId);
+    db.prepare("UPDATE versions SET is_latest = 0 WHERE app_id = ?").run(safeAppId);
     await rm(legacyFile, { force: true }).catch(() => {});
     return null;
   }
   const maxCode = Number(history[0].version_code);
   db.transaction(() => {
-    db.prepare("UPDATE versions SET is_latest = 0 WHERE app_id = ?").run(appId);
-    db.prepare("UPDATE versions SET is_latest = 1 WHERE app_id = ? AND version_code = ?").run(appId, maxCode);
+    db.prepare("UPDATE versions SET is_latest = 0 WHERE app_id = ?").run(safeAppId);
+    db.prepare("UPDATE versions SET is_latest = 1 WHERE app_id = ? AND version_code = ?").run(safeAppId, maxCode);
   })();
 
-  const maxVer = getVersion(appId, maxCode);
+  const maxVer = getVersion(safeAppId, maxCode);
   if (maxVer?.file_url) {
-    const maxFile = path.join(releaseDir, path.basename(maxVer.file_url));
+    const maxFile = getSafeFilePath(safeAppId, "releases", sanitizeFilename(path.basename(maxVer.file_url)));
     try {
       await copyFile(maxFile, legacyFile);
     } catch {}
@@ -384,12 +395,13 @@ export async function refreshAppLatestVersion(appId) {
 }
 
 export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePatches = false } = {}) {
-  const appRow = getApp(appId);
-  if (!appRow) throw new Error(`App "${appId}" 不存在`);
+  const safeAppId = sanitizeAppId(appId);
+  const appRow = getApp(safeAppId);
+  if (!appRow) throw new Error(`App "${safeAppId}" 不存在`);
   if (!appRow.github_repo) throw new Error("githubRepo 未配置");
   const cleanRepo = cleanGithubRepo(appRow.github_repo);
 
-  const token = config.resolveGithubToken(appId);
+  const token = config.resolveGithubToken(safeAppId);
   const platform = appRow.platform || "android";
   const defaultExt = getFileExt(platform);
   const base = String(appRow.github_api_url || "https://api.github.com").replace(/\/$/, "");
@@ -408,7 +420,7 @@ export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePa
   const releases = await releasesRes.json();
   if (!Array.isArray(releases)) throw new Error("GitHub 返回的 Release 列表无效");
 
-  const releaseDir = path.join(getAppFilesDir(appId), "releases");
+  const releaseDir = getSafeFilePath(safeAppId, "releases");
   await mkdir(releaseDir, { recursive: true });
 
   const importedVersions = [];
@@ -448,9 +460,9 @@ export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePa
       }
 
       const ext = path.extname(fileAsset.name).replace(/^\./, "").toLowerCase() || defaultExt;
-      const releaseFileName = `release-v${versionCode}.${ext}`;
-      const versionedFile = path.join(releaseDir, releaseFileName);
-      const existing = getVersion(appId, versionCode);
+      const releaseFileName = sanitizeFilename(`release-v${versionCode}.${ext}`);
+      const versionedFile = getSafeFilePath(safeAppId, "releases", releaseFileName);
+      const existing = getVersion(safeAppId, versionCode);
 
       if (existing) {
         let fileExists = false;
@@ -465,12 +477,13 @@ export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePa
       }
 
       const randSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const tmpDir = path.join(getAppFilesDir(appId), "tmp");
+      const tmpDir = getSafeFilePath(safeAppId, "tmp");
       await mkdir(tmpDir, { recursive: true });
-      const tempFile = path.join(tmpDir, `.release-${versionCode}-${randSuffix}.tmp`);
+      const tempFileName = sanitizeFilename(`.release-${versionCode}-${randSuffix}.tmp`);
+      const tempFile = getSafeFilePath(safeAppId, "tmp", tempFileName);
       try {
         await downloadWithTimeout(fileAsset.browser_download_url, { headers }, tempFile, fileTimeoutMs);
-        await saveFile(appId, "releases", releaseFileName, tempFile);
+        await saveFile(safeAppId, "releases", releaseFileName, tempFile);
       } finally {
         await rm(tempFile, { force: true }).catch(() => {});
       }
@@ -496,7 +509,7 @@ export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePa
           .filter(Boolean);
       }
 
-      upsertVersion(appId, {
+      upsertVersion(safeAppId, {
         versionCode,
         versionName,
         minVersionCode: Number.isInteger(Number(metadata.minVersionCode)) ? Number(metadata.minVersionCode) : 1,
@@ -504,7 +517,7 @@ export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePa
         releaseNotes,
         changelogUrl,
         publishedAt: String(metadata.publishedAt || release.published_at || "").slice(0, 10),
-        fileUrl: `/api/apps/${appId}/releases/${releaseFileName}`,
+        fileUrl: `/api/apps/${safeAppId}/releases/${releaseFileName}`,
         sha256,
         size,
         isLatest: false,
@@ -518,12 +531,12 @@ export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePa
     }
   }
 
-  const latestCode = await refreshAppLatestVersion(appId);
+  const latestCode = await refreshAppLatestVersion(safeAppId);
 
   let patchesResult = null;
   if (autoGeneratePatches && latestCode) {
     try {
-      patchesResult = await generateAllMissingPatchesForVersion(appId, latestCode, githubContext);
+      patchesResult = await generateAllMissingPatchesForVersion(safeAppId, latestCode, githubContext);
     } catch (patchErr) {
       console.warn(`[releaseService] 自动补齐差分包失败:`, patchErr.message);
     }
@@ -544,8 +557,9 @@ export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePa
 export async function createManualVersion(appId, {
   versionCode, versionName, releaseNotes, publishedAt, minVersionCode, forceUpdate, changelogUrl, fileUrl, sha256, size, rolloutPercentage, channel
 }, fileInfo = null) {
-  const appRow = getApp(appId);
-  if (!appRow) throw new Error(`App "${appId}" 不存在`);
+  const safeAppId = sanitizeAppId(appId);
+  const appRow = getApp(safeAppId);
+  if (!appRow) throw new Error(`App "${safeAppId}" 不存在`);
   const vCode = Number(versionCode);
   if (!Number.isInteger(vCode) || vCode < 1) {
     throw new Error("versionCode 必须为大于等于 1 的整数");
@@ -554,7 +568,7 @@ export async function createManualVersion(appId, {
   const vName = String(versionName || "").trim();
   if (!vName) throw new Error("versionName 不能为空");
 
-  const existing = getVersion(appId, vCode);
+  const existing = getVersion(safeAppId, vCode);
   if (existing) throw new Error(`版本 ${vCode} 已存在，不能重复补录`);
 
   let finalFileUrl = String(fileUrl || "").trim();
@@ -562,16 +576,18 @@ export async function createManualVersion(appId, {
   let finalSize = Number(size) || 0;
 
   if (fileInfo && fileInfo.filePath) {
-    const ext = path.extname(fileInfo.originalFilename || "").replace(/^\./, "").toLowerCase() || "apk";
-    const releaseFileName = `release-v${vCode}.${ext}`;
-    finalSha256 = await computeFileSha256(fileInfo.filePath);
-    finalSize = (await stat(fileInfo.filePath)).size || 0;
-    await saveFile(appId, "releases", releaseFileName, fileInfo.filePath);
-    await rm(fileInfo.filePath, { force: true }).catch(()=>{});
-    finalFileUrl = `/api/apps/${appId}/releases/${releaseFileName}`;
+    const safeFilePath = assertSafeLocalPath(fileInfo.filePath);
+    const originalFn = sanitizeFilename(fileInfo.originalFilename || "app.apk");
+    const ext = path.extname(originalFn).replace(/^\./, "").toLowerCase() || "apk";
+    const releaseFileName = sanitizeFilename(`release-v${vCode}.${ext}`);
+    finalSha256 = await computeFileSha256(safeFilePath);
+    finalSize = (await stat(safeFilePath)).size || 0;
+    await saveFile(safeAppId, "releases", releaseFileName, safeFilePath);
+    await rm(safeFilePath, { force: true }).catch(()=>{});
+    finalFileUrl = `/api/apps/${safeAppId}/releases/${releaseFileName}`;
   }
 
-  upsertVersion(appId, {
+  upsertVersion(safeAppId, {
     versionCode: vCode, versionName, minVersionCode: Number(minVersionCode) || 1, forceUpdate: Boolean(forceUpdate),
     releaseNotes: Array.isArray(releaseNotes) ? releaseNotes : String(releaseNotes||"").split("\n"),
     changelogUrl, publishedAt: String(publishedAt || new Date().toISOString().slice(0, 10)),
@@ -579,23 +595,24 @@ export async function createManualVersion(appId, {
     channel: channel || "stable", rolloutPercentage: Number(rolloutPercentage) || 100
   });
 
-  const latestCode = await refreshAppLatestVersion(appId);
+  const latestCode = await refreshAppLatestVersion(safeAppId);
   
-  await sendWebhookNotification(appId, "release_synced", {
+  await sendWebhookNotification(safeAppId, "release_synced", {
     versionName, versionCode, patchesCount: 0, errorCount: 0, size: finalSize, releaseNotes: releaseNotes, isManual: true
   });
-  await pruneOldVersions(appId).catch(console.error);
+  await pruneOldVersions(safeAppId).catch(console.error);
 
-  return { ...formatVersion(getVersion(appId, vCode)), isLatest: latestCode === vCode };
+  return { ...formatVersion(getVersion(safeAppId, vCode)), isLatest: latestCode === vCode };
 }
 
 export async function previewLatestRelease(appId) {
-  const appRow = getApp(appId);
-  if (!appRow) throw new Error(`App "${appId}" 不存在`);
+  const safeAppId = sanitizeAppId(appId);
+  const appRow = getApp(safeAppId);
+  if (!appRow) throw new Error(`App "${safeAppId}" 不存在`);
   if (!appRow.github_repo) throw new Error("该 App 尚未配置 githubRepo");
 
   const cleanRepo = cleanGithubRepo(appRow.github_repo);
-  const token = config.resolveGithubToken(appId);
+  const token = config.resolveGithubToken(safeAppId);
   const platform = appRow.platform || "android";
   const base = String(appRow.github_api_url || "https://api.github.com").replace(/\/$/, "");
   const headers = buildHeaders(token);
@@ -659,18 +676,18 @@ export async function previewLatestRelease(appId) {
 }
 
 export async function rollbackToVersion(appId, targetVersionCode) {
-  const appRow = getApp(appId);
-  if (!appRow) throw new Error(`App "${appId}" 不存在`);
+  const safeAppId = sanitizeAppId(appId);
+  const appRow = getApp(safeAppId);
+  if (!appRow) throw new Error(`App "${safeAppId}" 不存在`);
   const vCode = Number(targetVersionCode);
 
-  const targetVer = rollbackVersionToLatest(appId, vCode);
+  const targetVer = rollbackVersionToLatest(safeAppId, vCode);
 
   // Refresh legacy file latest.{ext}
   const ext = getFileExt(appRow.platform);
-  const releaseDir = path.join(getAppFilesDir(appId), "releases");
-  const legacyFile = path.join(releaseDir, `latest.${ext}`);
+  const legacyFile = getSafeFilePath(safeAppId, "releases", sanitizeFilename(`latest.${ext}`));
   if (targetVer.file_url) {
-    const targetFile = path.join(releaseDir, path.basename(targetVer.file_url));
+    const targetFile = getSafeFilePath(safeAppId, "releases", sanitizeFilename(path.basename(targetVer.file_url)));
     try {
       await copyFile(targetFile, legacyFile);
     } catch (err) {
@@ -679,7 +696,7 @@ export async function rollbackToVersion(appId, targetVersionCode) {
   }
 
   // Send webhook notification
-  await sendWebhookNotification(appId, "rollback", {
+  await sendWebhookNotification(safeAppId, "rollback", {
     versionName: targetVer.version_name,
     versionCode: targetVer.version_code,
   }).catch(console.error);

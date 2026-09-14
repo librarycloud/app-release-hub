@@ -26,15 +26,24 @@ if (config.storageType === "s3") {
   });
 }
 
+import {
+  getSafeAppDir,
+  getSafeFilePath,
+  assertSafeLocalPath,
+  sanitizeAppId,
+  sanitizeSubDir,
+  sanitizeFilename,
+} from "../utils/pathSecurity.js";
+
 function getAppFilesDir(appId) {
-  return path.resolve(config.filesDir, appId);
+  return getSafeAppDir(appId);
 }
 
 /**
  * Ensures the target local directory exists.
  */
 async function ensureLocalDir(appId, subDir) {
-  const dir = path.join(getAppFilesDir(appId), subDir);
+  const dir = getSafeFilePath(appId, subDir);
   await mkdir(dir, { recursive: true });
   return dir;
 }
@@ -57,10 +66,15 @@ const MIME_TYPES = {
 };
 
 export async function saveFile(appId, subDir, filename, sourceFilePath) {
+  const safeAppId = sanitizeAppId(appId);
+  const safeSubDir = sanitizeSubDir(subDir);
+  const safeFilename = sanitizeFilename(filename);
+  const safeSource = assertSafeLocalPath(sourceFilePath);
+
   if (config.storageType === "s3") {
-    const key = `apps/${appId}/${subDir}/${filename}`;
-    const fileStream = createReadStream(sourceFilePath);
-    const ext = path.extname(filename).toLowerCase();
+    const key = `apps/${safeAppId}/${safeSubDir}/${safeFilename}`;
+    const fileStream = createReadStream(safeSource);
+    const ext = path.extname(safeFilename).toLowerCase();
     const contentType = MIME_TYPES[ext] || "application/octet-stream";
     
     const upload = new Upload({
@@ -78,19 +92,20 @@ export async function saveFile(appId, subDir, filename, sourceFilePath) {
     await upload.done();
     return key;
   } else {
-    const dir = await ensureLocalDir(appId, subDir);
-    const targetPath = path.join(dir, filename);
-    await copyFile(sourceFilePath, targetPath);
+    const targetPath = getSafeFilePath(safeAppId, safeSubDir, safeFilename);
+    await mkdir(path.dirname(targetPath), { recursive: true });
+    await copyFile(safeSource, targetPath);
     return targetPath;
   }
 }
 
 export async function deleteFile(appId, subDir, filenameOrKey) {
+  const safeAppId = sanitizeAppId(appId);
+  const safeSubDir = sanitizeSubDir(subDir);
   if (config.storageType === "s3") {
-    // filenameOrKey is the S3 key in this case
-    let key = filenameOrKey;
+    let key = String(filenameOrKey || "");
     if (!key.startsWith("apps/")) {
-      key = `apps/${appId}/${subDir}/${filenameOrKey}`;
+      key = `apps/${safeAppId}/${safeSubDir}/${sanitizeFilename(filenameOrKey)}`;
     }
     await s3Client.send(
       new DeleteObjectCommand({
@@ -99,18 +114,19 @@ export async function deleteFile(appId, subDir, filenameOrKey) {
       })
     ).catch(() => {});
   } else {
-    const targetPath = path.isAbsolute(filenameOrKey) 
-      ? filenameOrKey 
-      : path.join(getAppFilesDir(appId), subDir, filenameOrKey);
+    const safeFn = sanitizeFilename(filenameOrKey);
+    const targetPath = getSafeFilePath(safeAppId, safeSubDir, safeFn);
     await rm(targetPath, { force: true }).catch(() => {});
   }
 }
 
 export async function getFileMeta(appId, subDir, filenameOrKey) {
+  const safeAppId = sanitizeAppId(appId);
+  const safeSubDir = sanitizeSubDir(subDir);
   if (config.storageType === "s3") {
-    let key = filenameOrKey;
+    let key = String(filenameOrKey || "");
     if (!key.startsWith("apps/")) {
-      key = `apps/${appId}/${subDir}/${filenameOrKey}`;
+      key = `apps/${safeAppId}/${safeSubDir}/${sanitizeFilename(filenameOrKey)}`;
     }
     try {
       const head = await s3Client.send(
@@ -121,9 +137,8 @@ export async function getFileMeta(appId, subDir, filenameOrKey) {
       return { exists: false, isS3: true, key };
     }
   } else {
-    const targetPath = path.isAbsolute(filenameOrKey) 
-      ? filenameOrKey 
-      : path.join(getAppFilesDir(appId), subDir, filenameOrKey);
+    const safeFn = sanitizeFilename(filenameOrKey);
+    const targetPath = getSafeFilePath(safeAppId, safeSubDir, safeFn);
     try {
       const s = await stat(targetPath);
       return { exists: s.isFile(), size: s.size, isS3: false, path: targetPath };
@@ -134,10 +149,13 @@ export async function getFileMeta(appId, subDir, filenameOrKey) {
 }
 
 export async function getDownloadUrl(appId, subDir, filenameOrKey, isPrivate = false) {
+  const safeAppId = sanitizeAppId(appId);
+  const safeSubDir = sanitizeSubDir(subDir);
+  const safeFn = sanitizeFilename(filenameOrKey);
   if (config.storageType === "s3") {
-    let key = filenameOrKey;
+    let key = String(filenameOrKey || "");
     if (!key.startsWith("apps/")) {
-      key = `apps/${appId}/${subDir}/${filenameOrKey}`;
+      key = `apps/${safeAppId}/${safeSubDir}/${safeFn}`;
     }
     if (!isPrivate && config.s3.publicDomain) {
       return `${config.s3.publicDomain}/${key}`;
@@ -146,9 +164,7 @@ export async function getDownloadUrl(appId, subDir, filenameOrKey, isPrivate = f
     const command = new GetObjectCommand({ Bucket: config.s3.bucket, Key: key });
     return await getSignedUrl(s3Client, command, { expiresIn: 900 });
   } else {
-    // If local, just return the API path
-    const bn = path.basename(filenameOrKey);
-    return `/api/apps/${appId}/${subDir}/${bn}`;
+    return `/api/apps/${safeAppId}/${safeSubDir}/${safeFn}`;
   }
 }
 
@@ -157,26 +173,26 @@ export async function getDownloadUrl(appId, subDir, filenameOrKey, isPrivate = f
  * The caller is responsible for deleting the temp path after use.
  */
 export async function ensureLocalFilePath(appId, subDir, filenameOrKey) {
+  const safeAppId = sanitizeAppId(appId);
+  const safeSubDir = sanitizeSubDir(subDir);
+  const safeFn = sanitizeFilename(filenameOrKey);
   if (config.storageType === "s3") {
-    let key = filenameOrKey;
+    let key = String(filenameOrKey || "");
     if (!key.startsWith("apps/")) {
-      key = `apps/${appId}/${subDir}/${filenameOrKey}`;
+      key = `apps/${safeAppId}/${safeSubDir}/${safeFn}`;
     }
-    const { exists } = await getFileMeta(appId, subDir, key);
+    const { exists } = await getFileMeta(safeAppId, safeSubDir, key);
     if (!exists) throw new Error(`文件在 S3 中不存在: ${key}`);
     
     const command = new GetObjectCommand({ Bucket: config.s3.bucket, Key: key });
     const response = await s3Client.send(command);
     
-    const tmpDir = await ensureLocalDir(appId, "tmp");
-    const tmpPath = path.join(tmpDir, `dl-${Date.now()}-${path.basename(key)}`);
-    
+    const tmpPath = getSafeFilePath(safeAppId, "tmp", `dl-${Date.now()}-${safeFn}`);
+    await mkdir(path.dirname(tmpPath), { recursive: true });
     await pipeline(response.Body, createWriteStream(tmpPath));
     return { path: tmpPath, isTemp: true };
   } else {
-    const targetPath = path.isAbsolute(filenameOrKey) 
-      ? filenameOrKey 
-      : path.join(getAppFilesDir(appId), subDir, filenameOrKey);
+    const targetPath = getSafeFilePath(safeAppId, safeSubDir, safeFn);
     return { path: targetPath, isTemp: false };
   }
 }

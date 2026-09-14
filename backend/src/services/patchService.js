@@ -6,6 +6,7 @@ import { stat, mkdir } from "node:fs/promises";
 import path from "node:path";
 import PQueue from "p-queue";
 import { config } from "../config.js";
+import { assertSafeLocalPath } from "../utils/pathSecurity.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -22,9 +23,10 @@ export async function checkBsdiffAvailable() {
 }
 
 export async function computeFileSha256(filePath) {
+  const safePath = assertSafeLocalPath(filePath);
   return new Promise((resolve, reject) => {
     const hash = createHash("sha256");
-    const stream = createReadStream(filePath);
+    const stream = createReadStream(safePath);
     stream.on("data", (chunk) => hash.update(chunk));
     stream.on("end", () => resolve(hash.digest("hex").toLowerCase()));
     stream.on("error", reject);
@@ -36,6 +38,10 @@ import os from "node:os";
 const MIN_FREE_MEMORY_BYTES = 128 * 1024 * 1024; // 128MB critical memory barrier
 
 async function _generatePatch(oldFilePath, newFilePath, patchOutputPath) {
+  const safeOld = assertSafeLocalPath(oldFilePath);
+  const safeNew = assertSafeLocalPath(newFilePath);
+  const safeOutput = assertSafeLocalPath(patchOutputPath);
+
   const isAvailable = await checkBsdiffAvailable();
   if (!isAvailable) {
     throw new Error("系统未安装 bsdiff，请执行 apt-get install -y bsdiff (Linux) 或 brew install bsdiff (macOS)");
@@ -44,12 +50,12 @@ async function _generatePatch(oldFilePath, newFilePath, patchOutputPath) {
   if (freeMem < MIN_FREE_MEMORY_BYTES) {
     throw new Error(`系统当前可用内存极低 (${Math.round(freeMem / 1024 / 1024)}MB < 128MB)，暂缓执行差分以防 OOM 崩溃`);
   }
-  await mkdir(path.dirname(patchOutputPath), { recursive: true });
-  await execFileAsync("bsdiff", [oldFilePath, newFilePath, patchOutputPath], {
+  await mkdir(path.dirname(safeOutput), { recursive: true });
+  await execFileAsync("bsdiff", [safeOld, safeNew, safeOutput], {
     maxBuffer: 10 * 1024 * 1024,
   });
-  const fileStat = await stat(patchOutputPath);
-  const sha256 = await computeFileSha256(patchOutputPath);
+  const fileStat = await stat(safeOutput);
+  const sha256 = await computeFileSha256(safeOutput);
   return { size: fileStat.size, sha256 };
 }
 

@@ -325,7 +325,7 @@ export function recordAppCheck(appId) {
       ON CONFLICT(app_id, date) DO UPDATE SET check_count = check_count + 1
     `).run(appId, today);
   } catch (err) {
-    console.warn(`[storageAdapter] recordAppCheck error for ${appId}:`, err.message);
+    console.warn("[storageAdapter] recordAppCheck error for %s: %s", appId, err.message);
   }
 }
 
@@ -352,7 +352,7 @@ export function recordReleaseDownload(appId, filename) {
       db.prepare("UPDATE versions SET download_count = download_count + 1 WHERE app_id = ? AND version_code = ?").run(appId, vCode);
     }
   } catch (err) {
-    console.warn(`[storageAdapter] recordReleaseDownload error for ${appId}/${filename}:`, err.message);
+    console.warn("[storageAdapter] recordReleaseDownload error for %s/%s: %s", appId, filename, err.message);
   }
 }
 
@@ -377,7 +377,7 @@ export function recordPatchDownload(appId, filename) {
       `).run(appId, fromCode, targetCode);
     }
   } catch (err) {
-    console.warn(`[storageAdapter] recordPatchDownload error for ${appId}/${filename}:`, err.message);
+    console.warn("[storageAdapter] recordPatchDownload error for %s/%s: %s", appId, filename, err.message);
   }
 }
 

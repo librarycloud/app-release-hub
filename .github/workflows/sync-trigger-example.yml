@@ -10,6 +10,7 @@ on:
 jobs:
   notify-hub:
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Trigger App Release Hub sync
         run: |

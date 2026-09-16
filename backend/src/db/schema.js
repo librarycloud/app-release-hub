@@ -77,6 +77,8 @@ export function initSchema() {
       app_id               TEXT NOT NULL,
       device_id            TEXT NOT NULL,
       platform             TEXT NOT NULL DEFAULT '',
+      device_model         TEXT NOT NULL DEFAULT '',
+      os_version           TEXT NOT NULL DEFAULT '',
       current_version_code INTEGER,
       last_seen_at         TEXT NOT NULL DEFAULT (datetime('now')),
       created_at           TEXT NOT NULL DEFAULT (datetime('now')),
@@ -141,6 +143,14 @@ export function initSchema() {
   }
   if (!versionColumns.includes("channel")) {
     db.exec("ALTER TABLE versions ADD COLUMN channel TEXT NOT NULL DEFAULT 'stable'");
+  }
+
+  const deviceColumns = db.prepare("PRAGMA table_info(app_devices)").all().map((c) => c.name);
+  if (!deviceColumns.includes("device_model")) {
+    db.exec("ALTER TABLE app_devices ADD COLUMN device_model TEXT NOT NULL DEFAULT ''");
+  }
+  if (!deviceColumns.includes("os_version")) {
+    db.exec("ALTER TABLE app_devices ADD COLUMN os_version TEXT NOT NULL DEFAULT ''");
   }
 
   const patchColumns = db.prepare("PRAGMA table_info(patches)").all().map((c) => c.name);

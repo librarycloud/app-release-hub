@@ -18,6 +18,9 @@
   - 平台路径：`/api/apps/:appId/version/:platform`（例如 `/android`、`/windows`、`/macos` 等）
 - **参数**：
   - `versionCode`（可选，数字）：客户端当前安装的版本号
+  - `deviceId`（可选，字符串）：设备唯一标识（也支持通过 `x-device-id` Header 传递），用于活跃设备统计
+  - `deviceModel`（可选，字符串）：设备机型名称，如 "iPhone 14"（也支持通过 `x-device-model` Header 传递）
+  - `osVersion`（可选，字符串）：系统版本号，如 "iOS 16.4"（也支持通过 `x-os-version` Header 传递）
   - `policy`（可选，字符串）：临时覆盖 App 默认的“差分就绪策略”。支持：
     - `hide_download_link`：有新版本但差分未就绪时，不提供下载链接，`patchReady: false`（默认推荐）
     - `silent`：差分未就绪前完全静默，返回 `hasUpdate: false`

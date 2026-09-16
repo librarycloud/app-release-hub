@@ -58,6 +58,9 @@
           <el-button @click="openSyncHistoryDialog">
             📥 导入历史
           </el-button>
+          <el-button @click="goToDevicesPage">
+            📱 活跃设备
+          </el-button>
           <el-button @click="openManualVersionDialog">
             ➕ 补录
           </el-button>
@@ -191,10 +194,14 @@
               :title="`${d.date}\n检查请求: ${d.check_count} 次\n下载次数: ${d.total_downloads} 次 (全量: ${d.full_download_count}, 差分: ${d.patch_download_count})`"
             >
               <div class="trend-bar-track">
-                <div class="trend-bar-fill checks" :style="{ height: getBarHeight(d.check_count, maxTrendChecks) + '%' }"></div>
+                <div class="trend-bar-fill checks" :style="{ height: getBarHeight(d.check_count, maxTrendChecks) + '%' }">
+                  <span class="trend-bar-label" v-if="d.check_count > 0">{{ formatCountCompact(d.check_count) }}</span>
+                </div>
               </div>
               <div class="trend-bar-track">
-                <div class="trend-bar-fill downloads" :style="{ height: getBarHeight(d.total_downloads, maxTrendDownloads) + '%' }"></div>
+                <div class="trend-bar-fill downloads" :style="{ height: getBarHeight(d.total_downloads, maxTrendDownloads) + '%' }">
+                  <span class="trend-bar-label" v-if="d.total_downloads > 0">{{ formatCountCompact(d.total_downloads) }}</span>
+                </div>
               </div>
             </div>
             <div class="trend-date">{{ formatDayMonth(d.date) }}</div>
@@ -1057,12 +1064,12 @@
         </el-button>
       </template>
     </el-dialog>
-
+  </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElNotification, ElMessageBox } from "element-plus";
 import ThemeToggle from "../components/ThemeToggle.vue";
 import {
@@ -1088,6 +1095,8 @@ import {
   rollbackVersion,
   previewRelease,
   getAppStats,
+  getAppDevices,
+  deleteAppDevice,
 } from "../api/appHub.js";
 
 const route = useRoute();
@@ -1133,8 +1142,21 @@ function formatDayMonth(dateStr) {
   if (parts.length >= 3) return `${parts[1]}/${parts[2]}`;
   return dateStr;
 }
+
+function formatCountCompact(val) {
+  if (!val) return "0";
+  if (val >= 10000) return (val / 10000).toFixed(1) + "w";
+  if (val >= 1000) return (val / 1000).toFixed(1) + "k";
+  return String(val);
+}
 const loading = ref(false);
 const syncing = ref(false);
+
+const router = useRouter();
+
+function goToDevicesPage() {
+  router.push(`/apps/${appId}/devices`);
+}
 const versionGroups = ref([]);
 const bsdiffAvailable = ref(true);
 const openGroups = ref([]);
@@ -2157,6 +2179,7 @@ onUnmounted(() => {
   justify-content: center;
   gap: 4px;
   cursor: pointer;
+  padding-top: 14px; /* leave space for labels */
 }
 
 .trend-bar-track {
@@ -2167,13 +2190,24 @@ onUnmounted(() => {
   align-items: flex-end;
   background: var(--app-surface-subtle);
   border-radius: 4px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .trend-bar-fill {
   width: 100%;
   border-radius: 4px 4px 0 0;
   transition: height 0.3s ease;
+  position: relative;
+}
+
+.trend-bar-label {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: var(--app-text-regular);
+  white-space: nowrap;
 }
 
 .trend-bar-fill.checks {

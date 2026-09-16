@@ -59,6 +59,10 @@ export const testWebhook = (appId) => http.post(`/admin/apps/${appId}/webhook/te
 export const getGlobalStats = () => http.get("/admin/stats/overview");
 export const getAppStats = (appId) => http.get(`/admin/apps/${appId}/stats`);
 
+// ─── Devices ─────────────────────────────────────────────────────────────────
+export const getAppDevices = (appId) => http.get(`/admin/apps/${appId}/devices`);
+export const deleteAppDevice = (appId, deviceId) => http.delete(`/admin/apps/${appId}/devices/${encodeURIComponent(deviceId)}`);
+
 // ─── Auth helper ─────────────────────────────────────────────────────────────
 export function setApiKey(key) { localStorage.setItem("admin_api_key", key); }
 export function getApiKey() { return localStorage.getItem("admin_api_key") || ""; }

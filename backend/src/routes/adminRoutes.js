@@ -21,6 +21,8 @@ import {
   importAppsController,
   previewReleaseController,
   rollbackVersionController,
+  listAppDevicesController,
+  deleteAppDeviceController,
 } from "../controllers/appController.js";
 
 const auth = { preHandler: [apiKeyAuth], config: { rateLimit: false } };
@@ -37,6 +39,10 @@ export default async function adminRoutes(fastify) {
   fastify.delete("/admin/apps/:appId", auth, deleteAppController);
   fastify.get("/admin/apps/export", auth, exportAppsController);
   fastify.post("/admin/apps/import", auth, importAppsController);
+
+  // Device management
+  fastify.get("/admin/apps/:appId/devices", auth, listAppDevicesController);
+  fastify.delete("/admin/apps/:appId/devices/:deviceId", auth, deleteAppDeviceController);
 
   // Release management
   fastify.post("/admin/sync-all", auth, syncAllAppsController);

@@ -461,29 +461,52 @@ export function getGlobalStats() {
   };
 }
 
+// ─── Device Management ───────────────────────────────────────────────────────
+
+export function getAppDevices(appId) {
+  return db.prepare(`
+    SELECT device_id as deviceId, platform, device_model as deviceModel, os_version as osVersion,
+           current_version_code as versionCode, last_seen_at as lastSeenAt, created_at as createdAt
+    FROM app_devices
+    WHERE app_id = ?
+    ORDER BY last_seen_at DESC
+  `).all(appId);
+}
+
+export function deleteAppDevice(appId, deviceId) {
+  const result = db.prepare(`
+    DELETE FROM app_devices WHERE app_id = ? AND device_id = ?
+  `).run(appId, deviceId);
+  return result.changes > 0;
+}
+
 // ─── Device Tracking ─────────────────────────────────────────────────────────
 
-export function recordDeviceActive(appId, deviceId, { platform = "", versionCode = null } = {}) {
+export function recordDeviceActive(appId, deviceId, { platform = "", deviceModel = "", osVersion = "", versionCode = null } = {}) {
   if (!appId || !deviceId) return;
   const devId = String(deviceId).trim();
   if (!devId) return;
 
   db.prepare(`
-    INSERT INTO app_devices (app_id, device_id, platform, current_version_code, last_seen_at)
-    VALUES (?, ?, ?, ?, datetime('now'))
+    INSERT INTO app_devices (app_id, device_id, platform, device_model, os_version, current_version_code, last_seen_at)
+    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(app_id, device_id) DO UPDATE SET
       platform = CASE WHEN ? != '' THEN ? ELSE platform END,
+      device_model = CASE WHEN ? != '' THEN ? ELSE device_model END,
+      os_version = CASE WHEN ? != '' THEN ? ELSE os_version END,
       current_version_code = CASE WHEN ? IS NOT NULL THEN ? ELSE current_version_code END,
       last_seen_at = datetime('now')
   `).run(
     appId,
     devId,
     platform,
+    deviceModel,
+    osVersion,
     versionCode,
-    platform,
-    platform,
-    versionCode,
-    versionCode
+    platform, platform,
+    deviceModel, deviceModel,
+    osVersion, osVersion,
+    versionCode, versionCode
   );
 }
 

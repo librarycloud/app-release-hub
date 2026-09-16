@@ -6,6 +6,7 @@ const routes = [
   { path: "/share/:appId", component: () => import("../views/ShareApp.vue"), meta: { public: true } },
   { path: "/", component: () => import("../views/AppList.vue") },
   { path: "/apps/:appId", component: () => import("../views/AppDetail.vue") },
+  { path: "/apps/:appId/devices", component: () => import("../views/AppDevices.vue") },
 ];
 
 const router = createRouter({ history: createWebHistory(), routes });

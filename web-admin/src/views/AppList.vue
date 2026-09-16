@@ -814,6 +814,7 @@ html.dark .pill-count {
   cursor: pointer;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .app-card-top {
@@ -842,6 +843,7 @@ html.dark .pill-count {
 
 .app-title-area {
   margin-bottom: 14px;
+  min-width: 0;
 }
 
 .app-name {
@@ -855,6 +857,10 @@ html.dark .pill-count {
 
 .app-id-code {
   margin-top: 4px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-id-code code {
@@ -1082,7 +1088,7 @@ html.dark .pill-count {
   }
 
   .apps-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
   }
 

@@ -5,7 +5,8 @@ import path from "node:path";
 import { config } from "../config.js";
 import {
   getApp, recordSyncResult, recordAppCheck, recordReleaseDownload, recordPatchDownload, 
-  getAppStats, getGlobalStats, recordDeviceActive, exportAllAppsConfig, importAppsConfig
+  getAppStats, getGlobalStats, recordDeviceActive, exportAllAppsConfig, importAppsConfig,
+  getAppDevices, deleteAppDevice
 } from "../services/storageAdapter.js";
 import {
   getAllApps, getAppById, registerApp, updateAppConfig, removeApp
@@ -72,11 +73,15 @@ export async function clientVersionController(request, reply) {
   const policy = request.query.policy;
   const channel = request.query.channel || "stable";
   const deviceId = request.query.deviceId || request.headers["x-device-id"] || "";
+  const deviceModel = request.query.deviceModel || request.headers["x-device-model"] || "";
+  const osVersion = request.query.osVersion || request.headers["x-os-version"] || "";
 
   if (deviceId) {
     try {
       recordDeviceActive(appId, deviceId, {
         platform: app.platform,
+        deviceModel,
+        osVersion,
         versionCode: Number(currentVersionCode) || null,
       });
     } catch {}
@@ -556,4 +561,24 @@ export async function importAppsController(request, reply) {
   }
   const result = importAppsConfig(appsList);
   return ok(reply, result, `批量导入完成: 新增 ${result.createdCount} 个，更新 ${result.updatedCount} 个`);
+}
+
+export async function listAppDevicesController(request, reply) {
+  const { appId } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+  const devices = getAppDevices(appId);
+  return ok(reply, devices);
+}
+
+export async function deleteAppDeviceController(request, reply) {
+  const { appId, deviceId } = request.params;
+  const app = await requireApp(appId, reply);
+  if (!app) return;
+  const success = deleteAppDevice(appId, deviceId);
+  if (success) {
+    return ok(reply, null, "设备已删除");
+  } else {
+    return reply.code(404).send({ code: 404, message: "设备未找到或已被删除" });
+  }
 }

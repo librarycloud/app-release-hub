@@ -165,9 +165,12 @@ async function serveFileWithRange(request, reply, appId, subDir, filename, recor
   } catch (err) {
     return reply.code(400).send({ code: 400, message: err.message });
   }
-
-  try { recordStatFn(app.appId, safeFilename); } catch {}
-
+  const range = request.headers.range;
+  const isFirstChunk = !range || range.startsWith("bytes=0-") || range === "bytes=0";
+  
+  if (isFirstChunk && request.method === "GET") {
+    try { recordStatFn(app.appId, safeFilename); } catch {}
+  }
   if (config.storageType === "s3") {
     const url = await getDownloadUrl(app.appId, safeSubDir, safeFilename, app.isPrivate);
     return reply.redirect(302, url);

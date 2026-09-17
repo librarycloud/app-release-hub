@@ -198,7 +198,6 @@ async function serveFileWithRange(request, reply, appId, subDir, filename, recor
     reply.header("Content-Type", "application/octet-stream");
   }
 
-  const range = request.headers.range;
   if (range) {
     const parts = range.replace(/bytes=/, "").split("-");
     const start = parseInt(parts[0], 10);

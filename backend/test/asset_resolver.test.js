@@ -4,6 +4,7 @@ import {
   findMetadataAsset,
   findBinaryAsset,
   resolveReleaseAssets,
+  parseVersionCodeFromTag,
 } from "../src/services/assetResolver.js";
 
 describe("Asset Resolver Tests", () => {
@@ -133,6 +134,25 @@ describe("Asset Resolver Tests", () => {
       const droidRes = resolveReleaseAssets(assets, "android");
       expect(droidRes.metaAsset?.name).toBe("app-version.android.json");
       expect(droidRes.fileAsset?.name).toBe("app-release.apk");
+    });
+  });
+
+  describe("parseVersionCodeFromTag", () => {
+    it("should parse semver tags into deterministic integer version codes", () => {
+      expect(parseVersionCodeFromTag("1.1.4")).toBe(10104);
+      expect(parseVersionCodeFromTag("v1.4.13")).toBe(10413);
+      expect(parseVersionCodeFromTag("1.0.0")).toBe(10000);
+      expect(parseVersionCodeFromTag("162")).toBe(162);
+      expect(parseVersionCodeFromTag("2.0.1.5")).toBe(2000105);
+    });
+
+    it("should match E6Sync zip asset for Windows using regex ^E6Sync.*$", () => {
+      const assets = [{ name: "E6Sync-Server2008-1.1.4.zip" }];
+      const matched = findBinaryAsset(assets, {
+        platform: "windows",
+        assetPattern: "^E6Sync.*$",
+      });
+      expect(matched?.name).toBe("E6Sync-Server2008-1.1.4.zip");
     });
   });
 });

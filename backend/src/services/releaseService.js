@@ -18,7 +18,7 @@ import {
   rollbackVersionToLatest,
 } from "./storageAdapter.js";
 import { checkBsdiffAvailable, computeFileSha256, generatePatch } from "./patchService.js";
-import { getFileExt, findMetadataAsset, findBinaryAsset } from "./assetResolver.js";
+import { getFileExt, findMetadataAsset, findBinaryAsset, parseVersionCodeFromTag } from "./assetResolver.js";
 import { cleanGithubRepo } from "./appRegistryService.js";
 import { saveFile, deleteFile, ensureLocalFilePath, getFileMeta } from "./storageProvider.js";
 import { sendWebhookNotification } from "./notificationService.js";
@@ -221,30 +221,86 @@ async function _doSyncLatestRelease(appId, { githubRepo, githubApiUrl = "https:/
   const headers = buildHeaders(token);
   const githubContext = { base, repo: cleanRepo, headers, platform, assetPattern };
 
-  const releaseRes = await fetchWithTimeout(`${base}/repos/${cleanRepo}/releases/latest`, { headers }, metadataTimeoutMs);
-  let release;
-  if (releaseRes.status === 404) {
-    const listRes = await fetchWithTimeout(`${base}/repos/${cleanRepo}/releases?per_page=1`, { headers }, metadataTimeoutMs);
+  let release = null;
+
+  // 1. First attempt to check /releases/latest
+  const latestRes = await fetchWithTimeout(`${base}/repos/${cleanRepo}/releases/latest`, { headers }, metadataTimeoutMs);
+  if (latestRes.ok) {
+    const candidate = await latestRes.json();
+    const candidateAssets = candidate.assets || [];
+    const matchedFile = findBinaryAsset(candidateAssets, { platform, assetPattern });
+    if (matchedFile) {
+      release = candidate;
+    }
+  }
+
+  // 2. If /releases/latest was 404 or did not contain installer matching this app (e.g. multi-app repo):
+  // Query releases list (/releases?per_page=30) and find the most recent release that matches!
+  if (!release) {
+    const listRes = await fetchWithTimeout(`${base}/repos/${cleanRepo}/releases?per_page=30`, { headers }, metadataTimeoutMs);
     if (!listRes.ok) throw new Error(`GitHub API 请求失败: HTTP ${listRes.status}`);
     const list = await listRes.json();
     if (!Array.isArray(list) || list.length === 0) throw new Error(`GitHub 仓库 "${cleanRepo}" 中尚未发布任何 Release`);
-    release = list[0];
-  } else if (!releaseRes.ok) {
-    throw new Error(`GitHub API 请求失败: HTTP ${releaseRes.status}`);
-  } else {
-    release = await releaseRes.json();
+
+    for (const rel of list) {
+      if (rel.draft) continue;
+      const relAssets = rel.assets || [];
+      const matchedFile = findBinaryAsset(relAssets, { platform, assetPattern });
+      if (matchedFile) {
+        release = rel;
+        break;
+      }
+    }
+
+    if (!release) {
+      release = list[0];
+    }
   }
 
   const assets = release.assets || [];
   const metaAsset = findMetadataAsset(assets, platform);
-  if (!metaAsset) throw new Error(`Release 中未找到元数据清单 (app-version.json)`);
+  let metadata = null;
 
-  const metaRes = await fetchWithTimeout(metaAsset.browser_download_url, { headers }, metadataTimeoutMs);
-  if (!metaRes.ok) throw new Error(`元数据下载失败: ${metaRes.status}`);
-  const metadata = await metaRes.json();
+  if (metaAsset) {
+    const metaRes = await fetchWithTimeout(metaAsset.browser_download_url, { headers }, metadataTimeoutMs);
+    if (!metaRes.ok) throw new Error(`元数据下载失败: ${metaRes.status}`);
+    metadata = await metaRes.json();
+  } else {
+    // Fallback: Release has no app-version.json (common for desktop / third-party GitHub releases)
+    // Synthesize metadata from GitHub Release tag and body
+    const tag = String(release.tag_name || release.name || "").trim();
+    const cleanVer = tag.replace(/^v/i, "");
+    const vCode = parseVersionCodeFromTag(cleanVer);
+    if (!vCode) {
+      throw new Error(`Release "${tag}" 中未找到元数据清单 (app-version.json)，且无法从 Tag 推导版本代码 (versionCode)`);
+    }
+
+    let notes = [];
+    if (release.body) {
+      notes = String(release.body)
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => /^[-*]\s+/.test(l))
+        .map((l) => l.replace(/^[-*]\s+/, "").trim())
+        .filter(Boolean);
+    }
+    if (notes.length === 0) {
+      notes = [release.name || `Release ${tag}`];
+    }
+
+    metadata = {
+      versionCode: vCode,
+      versionName: cleanVer || tag,
+      minVersionCode: 1,
+      forceUpdate: false,
+      releaseNotes: notes,
+      changelogUrl: release.html_url || "",
+      publishedAt: String(release.published_at || "").slice(0, 10),
+    };
+  }
 
   const fileAsset = findBinaryAsset(assets, { platform, assetPattern, preferredFileName: metadata.fileName || metadata.assetName || "" });
-  if (!fileAsset) throw new Error(`Release 中未找到与平台 [${platform}] 匹配的安装包`);
+  if (!fileAsset) throw new Error(`Release "${release.tag_name || release.name}" 中未找到与平台 [${platform}] 匹配的安装包 (若自定义命名请配置 assetPattern)`);
 
   const ext = path.extname(fileAsset.name).replace(/^\./, "").toLowerCase() || defaultExt;
   const versionCode = Number(metadata.versionCode);

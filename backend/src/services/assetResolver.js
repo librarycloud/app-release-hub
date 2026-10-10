@@ -27,8 +27,8 @@ const PLATFORM_RULES = {
     avoidKeywords: ["-unaligned", "unaligned"],
   },
   windows: {
-    exts: [".exe", ".msi"],
-    keywords: ["win", "windows", "setup", "x64", "win32", "win64", "x86_64"],
+    exts: [".exe", ".msi", ".zip"],
+    keywords: ["win", "windows", "setup", "x64", "win32", "win64", "x86_64", "server"],
     avoidKeywords: ["uninstall", "helper"],
   },
   macos: {
@@ -198,4 +198,28 @@ export function resolveReleaseAssets(assets, platform, { assetPattern = "", pref
   const metaAsset = findMetadataAsset(assets, platform);
   const fileAsset = findBinaryAsset(assets, { platform, assetPattern, preferredFileName });
   return { metaAsset, fileAsset };
+}
+
+/**
+ * Parse an integer version code from a tag or release name (e.g. "1.1.4" -> 10104, "v1.4.13" -> 10413)
+ */
+export function parseVersionCodeFromTag(str) {
+  if (!str) return null;
+  const clean = String(str).trim().replace(/^v/i, "");
+  // If pure integer
+  if (/^\d+$/.test(clean)) {
+    const num = parseInt(clean, 10);
+    return num > 0 ? num : null;
+  }
+  // If semver e.g. 1.1.4 or 1.1.4.1
+  const m = clean.match(/(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.(\d+))?/);
+  if (!m) return null;
+  const major = parseInt(m[1] || "0", 10);
+  const minor = parseInt(m[2] || "0", 10);
+  const patch = parseInt(m[3] || "0", 10);
+  const build = m[4] !== undefined ? parseInt(m[4], 10) : null;
+  if (build !== null) {
+    return major * 1000000 + minor * 10000 + patch * 100 + build;
+  }
+  return major * 10000 + minor * 100 + patch;
 }

@@ -442,15 +442,20 @@ export async function refreshAppLatestVersion(appId) {
   const maxVer = getVersion(safeAppId, maxCode);
   if (maxVer?.file_url) {
     const maxFile = getSafeFilePath(safeAppId, "releases", sanitizeFilename(path.basename(maxVer.file_url)));
+    const actualExt = path.extname(maxVer.file_url).replace(/^\./, "").toLowerCase() || ext;
+    const actualLegacyFile = getSafeFilePath(safeAppId, "releases", sanitizeFilename(`latest.${actualExt}`));
     try {
-      await copyFile(maxFile, legacyFile);
+      await copyFile(maxFile, actualLegacyFile);
+      if (actualExt !== ext) {
+        await copyFile(maxFile, legacyFile).catch(() => {});
+      }
     } catch {}
   }
 
   return maxCode;
 }
 
-export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePatches = false } = {}) {
+export async function syncHistoricalReleases(appId, { limit = 50, autoGeneratePatches = false } = {}) {
   const safeAppId = sanitizeAppId(appId);
   const appRow = getApp(safeAppId);
   if (!appRow) throw new Error(`App "${safeAppId}" 不存在`);
@@ -464,17 +469,26 @@ export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePa
   const headers = buildHeaders(token);
   const githubContext = { base, repo: cleanRepo, headers, platform, assetPattern: appRow.asset_pattern || "" };
 
-  const perPage = Math.min(Math.max(Number(limit) || 20, 1), 100);
-  const releasesRes = await fetchWithTimeout(
-    `${base}/repos/${cleanRepo}/releases?per_page=${perPage}`,
-    { headers },
-    metadataTimeoutMs
-  );
-  if (!releasesRes.ok) {
-    throw new Error(`GitHub API 请求失败: HTTP ${releasesRes.status}`);
+  const targetLimit = Math.max(Number(limit) || 50, 1);
+  const releases = [];
+  let page = 1;
+  while (releases.length < targetLimit) {
+    const fetchCount = Math.min(targetLimit - releases.length, 100);
+    const releasesRes = await fetchWithTimeout(
+      `${base}/repos/${cleanRepo}/releases?per_page=${fetchCount}&page=${page}`,
+      { headers },
+      metadataTimeoutMs
+    );
+    if (!releasesRes.ok) {
+      if (page === 1) throw new Error(`GitHub API 请求失败: HTTP ${releasesRes.status}`);
+      break;
+    }
+    const pageItems = await releasesRes.json();
+    if (!Array.isArray(pageItems) || pageItems.length === 0) break;
+    releases.push(...pageItems);
+    if (pageItems.length < fetchCount) break;
+    page++;
   }
-  const releases = await releasesRes.json();
-  if (!Array.isArray(releases)) throw new Error("GitHub 返回的 Release 列表无效");
 
   const releaseDir = getSafeFilePath(safeAppId, "releases");
   await mkdir(releaseDir, { recursive: true });
@@ -492,26 +506,65 @@ export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePa
         assetPattern: appRow.asset_pattern || "",
       });
 
-      if (!metaAsset || !fileAsset) {
+      if (!fileAsset) {
         skippedVersions.push({
           tag: release.tag_name,
           name: release.name,
-          reason: !metaAsset ? "未找到元数据文件 (app-version.json)" : "未找到安装包文件",
+          reason: "未找到安装包文件",
         });
         continue;
       }
 
-      const metaRes = await fetchWithTimeout(metaAsset.browser_download_url, { headers }, metadataTimeoutMs);
-      if (!metaRes.ok) {
-        skippedVersions.push({ tag: release.tag_name, reason: `元数据下载失败: HTTP ${metaRes.status}` });
-        continue;
+      let metadata = null;
+      if (metaAsset) {
+        const metaRes = await fetchWithTimeout(metaAsset.browser_download_url, { headers }, metadataTimeoutMs);
+        if (!metaRes.ok) {
+          skippedVersions.push({ tag: release.tag_name, name: release.name, reason: `元数据下载失败: HTTP ${metaRes.status}` });
+          continue;
+        }
+        metadata = await metaRes.json();
+      } else {
+        // Tag-based metadata fallback (for releases without app-version.json)
+        const tag = String(release.tag_name || release.name || "").trim();
+        const cleanVer = tag.replace(/^v/i, "");
+        const vCode = parseVersionCodeFromTag(cleanVer);
+        if (!vCode) {
+          skippedVersions.push({
+            tag: release.tag_name,
+            name: release.name,
+            reason: "未找到元数据清单 (app-version.json)，且无法从 Tag 推导版本代码 (versionCode)",
+          });
+          continue;
+        }
+
+        let notes = [];
+        if (release.body) {
+          notes = String(release.body)
+            .split("\n")
+            .map((l) => l.trim())
+            .filter((l) => /^[-*]\s+/.test(l))
+            .map((l) => l.replace(/^[-*]\s+/, "").replace(/\s+by\s+@[\w-]+(?:\s+in\s+https?:\/\/\S+)?$/i, "").trim())
+            .filter(Boolean);
+        }
+        if (notes.length === 0) {
+          notes = [release.name || `Release ${tag}`];
+        }
+
+        metadata = {
+          versionCode: vCode,
+          versionName: cleanVer || tag,
+          minVersionCode: 1,
+          forceUpdate: false,
+          releaseNotes: notes,
+          changelogUrl: release.html_url || "",
+          publishedAt: String(release.published_at || "").slice(0, 10),
+        };
       }
-      const metadata = await metaRes.json();
 
       const versionCode = Number(metadata.versionCode);
       const versionName = String(metadata.versionName || "").trim();
       if (!Number.isInteger(versionCode) || versionCode < 1 || !versionName) {
-        skippedVersions.push({ tag: release.tag_name, reason: "元数据缺少有效 versionCode 或 versionName" });
+        skippedVersions.push({ tag: release.tag_name, name: release.name, reason: "元数据缺少有效 versionCode 或 versionName" });
         continue;
       }
 
@@ -524,7 +577,7 @@ export async function syncHistoricalReleases(appId, { limit = 20, autoGeneratePa
         let fileExists = false;
         try {
           const s = await stat(versionedFile);
-          fileExists = s.isFile();
+          fileExists = s.isFile() && s.size > 0;
         } catch {}
         if (fileExists) {
           skippedVersions.push({ versionCode, versionName, tag: release.tag_name, reason: "已存在且文件完整" });

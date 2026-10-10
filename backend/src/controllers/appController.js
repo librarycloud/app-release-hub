@@ -410,7 +410,7 @@ export async function syncHistoryReleasesController(request, reply) {
   const { appId } = request.params;
   const app = await requireApp(appId, reply);
   if (!app) return;
-  const { limit = 20, autoGeneratePatches = false } = request.body || {};
+  const { limit = 50, autoGeneratePatches = false } = request.body || {};
   const result = await syncHistoricalReleases(appId, { limit, autoGeneratePatches });
   return ok(reply, result, `已同步历史版本 (导入 ${result.importedCount} 个，跳过 ${result.skippedCount} 个)`);
 }

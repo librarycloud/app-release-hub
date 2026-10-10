@@ -396,4 +396,152 @@ describe("Historical Version Sync & Manual Backfill Tests", () => {
     expect(clientData.releaseNotes.some((n) => n.includes("【v0.7.0】"))).toBe(true);
     expect(clientData.releaseNotes.some((n) => n.includes("0.7.0 更新内容"))).toBe(true);
   });
+
+  it("should sync historical desktop/windows releases using tag-based metadata without app-version.json", async () => {
+    const WIN_APP_ID = "test-history-win-app";
+    deleteApp(WIN_APP_ID);
+
+    insertApp({
+      appId: WIN_APP_ID,
+      name: "E6Sync Windows Test",
+      platform: "windows",
+      githubRepo: "librarycloud/tcm-prescription-processing",
+      githubApiUrl: "https://api.github.com",
+      assetPattern: "^E6Sync.*$",
+    });
+
+    const releaseDir = path.join(config.filesDir, WIN_APP_ID, "releases");
+    await mkdir(releaseDir, { recursive: true });
+
+    // Seed existing latest version v10104 (1.1.4)
+    await writeFile(path.join(releaseDir, "release-v10104.zip"), "dummy-zip-114");
+    upsertVersion(WIN_APP_ID, {
+      versionCode: 10104,
+      versionName: "1.1.4",
+      minVersionCode: 1,
+      forceUpdate: false,
+      isLatest: true,
+      size: 13,
+      sha256: "dummy-sha-114",
+      fileUrl: `/api/apps/${WIN_APP_ID}/releases/release-v10104.zip`,
+      releaseNotes: ["1.1.4 当前最新版"],
+      publishedAt: "2024-05-01",
+    });
+
+    const originalFetch = globalThis.fetch;
+    const mockWinReleases = [
+      {
+        tag_name: "v1.4.13",
+        name: "药房助手 v1.4.13",
+        published_at: "2024-05-10T00:00:00Z",
+        assets: [
+          { name: "app-release.apk", browser_download_url: "https://mock.github.com/apk" },
+        ],
+      },
+      {
+        tag_name: "1.1.4",
+        name: "E6Sync 1.1.4",
+        published_at: "2024-05-01T00:00:00Z",
+        assets: [
+          { name: "E6Sync-Server2008-1.1.4.zip", browser_download_url: "https://mock.github.com/114.zip" },
+        ],
+      },
+      {
+        tag_name: "1.0.1",
+        name: "E6Sync 1.0.1",
+        published_at: "2024-03-01T00:00:00Z",
+        body: "- 修复网络重试\n- 增强稳定性",
+        assets: [
+          { name: "E6Sync-Server2008-1.0.1.zip", browser_download_url: "https://mock.github.com/101.zip" },
+        ],
+      },
+      {
+        tag_name: "1.0.0",
+        name: "E6Sync 1.0.0",
+        published_at: "2024-02-01T00:00:00Z",
+        body: "- 初始发布",
+        assets: [
+          { name: "E6Sync-Server2008-1.0.0.zip", browser_download_url: "https://mock.github.com/100.zip" },
+        ],
+      },
+    ];
+
+    globalThis.fetch = vi.fn(async (url) => {
+      const urlStr = String(url);
+      if (urlStr.includes("/releases?per_page=")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => mockWinReleases,
+        };
+      }
+      if (urlStr.includes("/101.zip")) {
+        return {
+          ok: true,
+          status: 200,
+          body: new ReadableStream({
+            start(controller) {
+              controller.enqueue(Buffer.from("mock-zip-data-v101"));
+              controller.close();
+            },
+          }),
+        };
+      }
+      if (urlStr.includes("/100.zip")) {
+        return {
+          ok: true,
+          status: 200,
+          body: new ReadableStream({
+            start(controller) {
+              controller.enqueue(Buffer.from("mock-zip-data-v100"));
+              controller.close();
+            },
+          }),
+        };
+      }
+      return { ok: false, status: 404 };
+    });
+
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: `/admin/apps/${WIN_APP_ID}/sync-history`,
+        headers: { "x-api-key": TEST_API_KEY },
+        payload: { limit: 50, autoGeneratePatches: false },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const json = res.json();
+      expect(json.code).toBe(0);
+      expect(json.data.totalScanned).toBe(4);
+      expect(json.data.importedCount).toBe(2);
+      expect(json.data.skippedCount).toBe(2);
+      expect(json.data.latestVersionCode).toBe(10104);
+
+      // Verify imported historical records
+      const v101 = getVersion(WIN_APP_ID, 10001);
+      expect(v101).toBeDefined();
+      expect(v101.version_name).toBe("1.0.1");
+      expect(v101.is_latest).toBe(0);
+      expect(JSON.parse(v101.release_notes)).toEqual(["修复网络重试", "增强稳定性"]);
+
+      const v100 = getVersion(WIN_APP_ID, 10000);
+      expect(v100).toBeDefined();
+      expect(v100.version_name).toBe("1.0.0");
+      expect(v100.is_latest).toBe(0);
+
+      // Verify latest remains 1.1.4
+      const v114 = getVersion(WIN_APP_ID, 10104);
+      expect(v114).toBeDefined();
+      expect(v114.is_latest).toBe(1);
+
+      // Verify files downloaded
+      const file101 = path.join(config.filesDir, WIN_APP_ID, "releases", "release-v10001.zip");
+      expect((await stat(file101)).isFile()).toBe(true);
+      expect(await readFile(file101, "utf-8")).toBe("mock-zip-data-v101");
+    } finally {
+      globalThis.fetch = originalFetch;
+      deleteApp(WIN_APP_ID);
+    }
+  });
 });

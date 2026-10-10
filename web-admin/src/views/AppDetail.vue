@@ -1298,7 +1298,7 @@ const editForm = ref({
 const showSyncHistoryDialog = ref(false);
 const syncingHistory = ref(false);
 const syncHistoryForm = ref({
-  limit: 20,
+  limit: 50,
   autoGeneratePatches: false,
 });
 
@@ -1655,7 +1655,7 @@ async function saveReleaseNotes() {
 
 function openSyncHistoryDialog() {
   syncHistoryForm.value = {
-    limit: 20,
+    limit: 50,
     autoGeneratePatches: false,
   };
   showSyncHistoryDialog.value = true;
@@ -1666,12 +1666,16 @@ async function submitSyncHistory() {
   try {
     const res = await syncHistoryReleases(appId, syncHistoryForm.value);
     const d = res.data || {};
+    const hasImported = (d.importedCount || 0) > 0;
     ElNotification({
       title: "历史版本同步完成",
       message: `扫描 ${d.totalScanned || 0} 个 Release，成功导入 ${d.importedCount || 0} 个版本，跳过 ${d.skippedCount || 0} 个${d.patchesGenerated ? `，自动生成 ${d.patchesGenerated} 个补丁` : ""}`,
-      type: "success",
+      type: hasImported ? "success" : "info",
       duration: 6000,
     });
+    if (d.skipped && d.skipped.length > 0) {
+      console.info("历史同步跳过的版本详情:", d.skipped);
+    }
     showSyncHistoryDialog.value = false;
     await load();
   } catch (err) {
